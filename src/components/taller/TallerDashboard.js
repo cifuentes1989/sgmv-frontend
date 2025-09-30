@@ -5,6 +5,7 @@ import SignatureCanvas from 'react-signature-canvas';
 const TallerDashboard = () => {
   const [pendientes, setPendientes] = useState([]);
   const [enReparacion, setEnReparacion] = useState([]);
+  const [historial, setHistorial] = useState([]);
   const [mensaje, setMensaje] = useState('');
   const [diagnosticoAbiertoId, setDiagnosticoAbiertoId] = useState(null);
   const [diagnosticoData, setDiagnosticoData] = useState({ texto: '', hora: '' });
@@ -18,8 +19,11 @@ const TallerDashboard = () => {
       setMensaje('Cargando...');
       const resPendientes = await api.get('/solicitudes/taller/pendientes');
       const resEnReparacion = await api.get('/solicitudes/taller/en-reparacion');
+      const resHistorial = await api.get('/solicitudes/taller/historial');
+      
       setPendientes(resPendientes.data);
       setEnReparacion(resEnReparacion.data);
+      setHistorial(resHistorial.data);
       setMensaje('');
     } catch (error) {
       console.error('Error al cargar datos:', error);
@@ -60,7 +64,7 @@ const TallerDashboard = () => {
 
   const handleFinalizarReparacion = async (e) => {
     e.preventDefault();
-    if (!finalizacionData.trabajos_realizados || !finalizacionData.hora_salida_taller) { return alert("Los campos 'Trabajos Realizados' y 'Hora de Salida' son obligatorios."); }
+    if (!finalizacionData.trabajos_realizados) { return alert("El campo 'Trabajos Realizados' es obligatorio."); }
     if (finalSigCanvas.current.isEmpty()) { return alert("La firma de finalización es obligatoria."); }
     const firma_taller_finalizacion = finalSigCanvas.current.toDataURL();
     try {
@@ -89,6 +93,7 @@ const TallerDashboard = () => {
               <strong>ID #{solicitud.id}</strong> | Vehículo: <strong>{solicitud.nombre_vehiculo} ({solicitud.placa_vehiculo})</strong>
             </header>
             <p><strong>Reportado por:</strong> {solicitud.nombre_conductor}</p>
+            <p><strong>Fecha Solicitud:</strong> {new Date(solicitud.fecha_creacion).toLocaleString('es-CO')}</p>
             <p><strong>Necesidad:</strong> {solicitud.necesidad_reportada}</p>
             {diagnosticoAbiertoId === solicitud.id ? (
               <form onSubmit={handleGuardarDiagnostico}>
@@ -114,7 +119,8 @@ const TallerDashboard = () => {
             <header>
               <strong>ID #{solicitud.id}</strong> | Vehículo: <strong>{solicitud.nombre_vehiculo} ({solicitud.placa_vehiculo})</strong>
             </header>
-            <p><strong>Diagnóstico:</strong> {solicitud.diagnostico_taller}</p>
+            <p><strong>Aprobado por:</strong> {solicitud.nombre_coordinador || 'N/A'}</p>
+            <p><strong>Diagnóstico a Realizar:</strong> {solicitud.diagnostico_taller}</p>
             {finalizacionAbiertaId === solicitud.id ? (
               <form onSubmit={handleFinalizarReparacion}>
                 <label htmlFor={`hora_salida_${solicitud.id}`}><strong>Hora de Salida:</strong></label>
@@ -136,6 +142,21 @@ const TallerDashboard = () => {
             ) : (<button onClick={() => handleAbrirFinalizacion(solicitud.id)}>Registrar Finalización</button>)}
           </article>
         )) : <p>No hay vehículos en reparación.</p>}
+      </details>
+      <details>
+        <summary>Historial de Trabajos Realizados ({historial.length})</summary>
+        {historial.length > 0 ? historial.map((s) => (
+          <article key={s.id}>
+            <header>
+              <strong>ID #{s.id}</strong> | Vehículo: <strong>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong> | Estado: <mark>{s.estado}</mark>
+            </header>
+            <p><strong>Conductor:</strong> {s.nombre_conductor}</p>
+            <p><strong>Necesidad Reportada:</strong> {s.necesidad_reportada}</p>
+            <hr/>
+            <p><strong>Diagnóstico Realizado:</strong> {s.diagnostico_taller}</p>
+            {s.trabajos_realizados && <p><strong>Trabajos Efectuados:</strong> {s.trabajos_realizados}</p>}
+          </article>
+        )) : <p>No hay trabajos en tu historial.</p>}
       </details>
     </main>
   );

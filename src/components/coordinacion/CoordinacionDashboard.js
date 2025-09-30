@@ -6,7 +6,7 @@ import SignatureCanvas from 'react-signature-canvas';
 const CoordinacionDashboard = () => {
   const [porAprobar, setPorAprobar] = useState([]);
   const [porCerrar, setPorCerrar] = useState([]);
-  const [finalizadas, setFinalizadas] = useState([]);
+  const [historialCompleto, setHistorialCompleto] = useState([]);
   const [mensaje, setMensaje] = useState('');
   const sigCanvases = {};
 
@@ -15,10 +15,10 @@ const CoordinacionDashboard = () => {
       setMensaje('Cargando...');
       const resAprobacion = await api.get('/solicitudes/coordinacion/aprobacion');
       const resCierre = await api.get('/solicitudes/coordinacion/cierre');
-      const resFinalizadas = await api.get('/solicitudes/coordinacion/finalizadas');
+      const resHistorial = await api.get('/solicitudes/coordinacion/historial');
       setPorAprobar(resAprobacion.data);
       setPorCerrar(resCierre.data);
-      setFinalizadas(resFinalizadas.data);
+      setHistorialCompleto(resHistorial.data);
       setMensaje('');
     } catch (error) {
       console.error('Error al cargar datos:', error);
@@ -118,7 +118,7 @@ const CoordinacionDashboard = () => {
     
     // --- Contenido y Firmas del PDF (ORDEN CORRECTO) ---
     addSection("1. SOLICITUD INICIAL", 
-        `Fecha: ${new Date(solicitud.fecha_creacion).toLocaleString()}\n` +
+        `Fecha: ${new Date(solicitud.fecha_creacion).toLocaleString('es-CO')}\n` +
         `Vehículo: ${solicitud.nombre_vehiculo || 'N/A'} (${solicitud.placa_vehiculo || 'N/A'})\n` +
         `Conductor: ${solicitud.nombre_conductor || 'N/A'}`
     );
@@ -127,7 +127,7 @@ const CoordinacionDashboard = () => {
     
     if (y > 220) { doc.addPage(); y = 20; }
     addSection("2. DIAGNÓSTICO DE TALLER", 
-        `Fecha Ingreso: ${solicitud.hora_ingreso_taller ? new Date(solicitud.hora_ingreso_taller).toLocaleString() : 'N/A'}\n` +
+        `Fecha Ingreso: ${solicitud.hora_ingreso_taller ? new Date(solicitud.hora_ingreso_taller).toLocaleString('es-CO') : 'N/A'}\n` +
         `Técnico: ${solicitud.nombre_tecnico || 'N/A'}`
     );
     addSection("Diagnóstico:", solicitud.diagnostico_taller);
@@ -135,7 +135,7 @@ const CoordinacionDashboard = () => {
 
     if (y > 220) { doc.addPage(); y = 20; }
     addSection("3. DECISIÓN DE COORDINACIÓN", 
-        `Fecha: ${solicitud.fecha_aprobacion_rechazo ? new Date(solicitud.fecha_aprobacion_rechazo).toLocaleString() : 'N/A'}\n` +
+        `Fecha: ${solicitud.fecha_aprobacion_rechazo ? new Date(solicitud.fecha_aprobacion_rechazo).toLocaleString('es-CO') : 'N/A'}\n` +
         `Coordinador: ${solicitud.nombre_coordinador || 'N/A'}\n` +
         `Decisión: ${(solicitud.motivo_rechazo ? 'Rechazado' : 'Aprobado')}`
     );
@@ -143,15 +143,15 @@ const CoordinacionDashboard = () => {
     addSignature("Firma Coordinador (Aprobación):", solicitud.firma_coordinacion_aprobacion);
 
     if (y > 220) { doc.addPage(); y = 20; }
-    addSection("4. DETALLE DE REPARACIÓN", `Fecha Salida: ${solicitud.hora_salida_taller ? new Date(solicitud.hora_salida_taller).toLocaleString() : 'N/A'}`);
+    addSection("4. DETALLE DE REPARACIÓN", `Fecha Salida: ${solicitud.hora_salida_taller ? new Date(solicitud.hora_salida_taller).toLocaleString('es-CO') : 'N/A'}`);
     addSection("Trabajos Realizados:", solicitud.trabajos_realizados || "N/A");
     addSection("Repuestos Utilizados:", solicitud.repuestos_utilizados || "N/A");
     
     if (y > 220) { doc.addPage(); y = 20; }
-    addSection("5. CIERRE Y ENTREGA", `Fecha de Cierre Final: ${solicitud.fecha_cierre_proceso ? new Date(solicitud.fecha_cierre_proceso).toLocaleString() : 'N/A'}`);
+    addSection("5. CIERRE Y ENTREGA", `Fecha de Cierre Final: ${solicitud.fecha_cierre_proceso ? new Date(solicitud.fecha_cierre_proceso).toLocaleString('es-CO') : 'N/A'}`);
     addSignature("Firma Conductor (Satisfacción):", solicitud.firma_conductor_satisfaccion);
     addSignature("Firma Coordinador (Cierre):", solicitud.firma_coordinacion_cierre);
-
+    
     // Guardar el PDF
     doc.save(`reporte_solicitud_${solicitud.id}.pdf`);
   };
@@ -166,12 +166,12 @@ const CoordinacionDashboard = () => {
 
       <details open>
         <summary>Solicitudes por Aprobar ({porAprobar.length})</summary>
-        {porAprobar.map(s => (
+        {porAprobar.length > 0 ? porAprobar.map(s => (
           <article key={s.id}>
             <header><strong>ID #{s.id}</strong> | Vehículo: <strong>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong></header>
             <p><strong>Reportado por:</strong> {s.nombre_conductor}</p>
             <p><strong>Necesidad:</strong> {s.necesidad_reportada}</p>
-            <p><strong>Diagnóstico Taller:</strong> {s.diagnostico_taller}</p>
+            <p style={{ background: '#f0f0f0', padding: '5px' }}><strong>Diagnóstico Taller:</strong> {s.diagnostico_taller}</p>
             <label>Firma de Coordinación:</label>
             <div style={{border: '1px solid var(--pico-contrast)', borderRadius: 'var(--pico-border-radius)', width: 300, height: 150}}>
               <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150}} />
@@ -181,12 +181,12 @@ const CoordinacionDashboard = () => {
               <button onClick={() => handleDecision(s.id, 'Rechazado')} className="secondary">Rechazar</button>
             </footer>
           </article>
-        ))}
+        )) : <p>No hay solicitudes pendientes de aprobación.</p>}
       </details>
 
       <details open>
         <summary>Procesos Pendientes de Cierre ({porCerrar.length})</summary>
-        {porCerrar.map(s => (
+        {porCerrar.length > 0 ? porCerrar.map(s => (
           <article key={s.id}>
              <header><strong>ID #{s.id}</strong> | Vehículo: <strong>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong></header>
              <p><strong>Estado:</strong> {s.estado}</p>
@@ -198,20 +198,38 @@ const CoordinacionDashboard = () => {
                 <button onClick={() => handleCierre(s.id)}>Cierre Final y Archivar</button>
              </footer>
           </article>
-        ))}
+        )) : <p>No hay procesos pendientes de cierre.</p>}
       </details>
 
       <details>
-        <summary>Historial de Procesos Finalizados ({finalizadas.length})</summary>
-        {finalizadas.map(s => (
+        <summary>Historial Completo de Solicitudes de la Sede ({historialCompleto.length})</summary>
+        {historialCompleto.length > 0 ? historialCompleto.map(s => (
           <article key={s.id}>
-            <header><strong>ID #{s.id}</strong> | Vehículo: <strong>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong></header>
-            <p>Fecha Cierre: {new Date(s.fecha_cierre_proceso).toLocaleDateString()}</p>
-            <footer>
-              <button onClick={() => generarPDF(s)}>Generar PDF</button>
-            </footer>
+            <header>
+              <strong>ID #{s.id}</strong> | Vehículo: <strong>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong> | Estado: <mark>{s.estado}</mark>
+            </header>
+            <details>
+              <summary>Ver Trazabilidad Completa</summary>
+              <div style={{paddingLeft: '1rem', borderLeft: '2px solid var(--pico-primary)'}}>
+                <p><strong><u>Etapa 1: Solicitud</u></strong></p>
+                <p><strong>Conductor:</strong> {s.nombre_conductor}</p>
+                <p><strong>Fecha y Hora:</strong> {new Date(s.fecha_creacion).toLocaleString('es-CO')}</p>
+                <p><strong>Necesidad Reportada:</strong> {s.necesidad_reportada}</p>
+                
+                {s.diagnostico_taller && <>
+                    <hr/>
+                    <p><strong><u>Etapa 2: Diagnóstico</u></strong></p>
+                    <p><strong>Técnico:</strong> {s.nombre_tecnico}</p>
+                    <p><strong>Fecha Ingreso:</strong> {new Date(s.hora_ingreso_taller).toLocaleString('es-CO')}</p>
+                    <p><strong>Diagnóstico:</strong> {s.diagnostico_taller}</p>
+                </>}
+              </div>
+            </details>
+            {s.estado === 'Proceso Finalizado' && (
+                <footer><button onClick={() => generarPDF(s)}>Generar PDF</button></footer>
+            )}
           </article>
-        ))}
+        )) : <p>No hay solicitudes en el historial de la sede.</p>}
       </details>
     </main>
   );
