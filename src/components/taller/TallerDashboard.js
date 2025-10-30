@@ -85,6 +85,7 @@ const TallerDashboard = () => {
       </hgroup>
       {mensaje && <article><p>{mensaje}</p></article>}
 
+      {/* --- SECCIÓN PENDIENTES --- */}
       <details open>
         <summary>Pendientes de Diagnóstico ({pendientes.length})</summary>
         {pendientes.length > 0 ? pendientes.map((solicitud) => (
@@ -112,6 +113,8 @@ const TallerDashboard = () => {
           </article>
         )) : <p>No hay solicitudes pendientes de diagnóstico.</p>}
       </details>
+
+      {/* --- SECCIÓN EN REPARACIÓN --- */}
       <details open>
         <summary>En Reparación ({enReparacion.length})</summary>
         {enReparacion.length > 0 ? enReparacion.map((solicitud) => (
@@ -143,6 +146,8 @@ const TallerDashboard = () => {
           </article>
         )) : <p>No hay vehículos en reparación.</p>}
       </details>
+
+      {/* --- SECCIÓN HISTORIAL (CON MOTIVO DE RECHAZO) --- */}
       <details>
         <summary>Historial de Trabajos Realizados ({historial.length})</summary>
         {historial.length > 0 ? historial.map((s) => (
@@ -155,13 +160,13 @@ const TallerDashboard = () => {
             <hr/>
             <p><strong>Diagnóstico Realizado:</strong> {s.diagnostico_taller}</p>
             {s.trabajos_realizados && <p><strong>Trabajos Efectuados:</strong> {s.trabajos_realizados}</p>}
-            {s.repuestos_utilizados && <p><strong>Repuestos Utilizados:</strong> {s.repuestos_utilizados}</p>}
-            {s.observaciones_taller && <p><strong>Observaciones del Taller:</strong> {s.observaciones_taller}</p>}
+            {/* --- LÍNEA AÑADIDA PARA MOTIVO DE RECHAZO --- */}
             {s.motivo_rechazo && (
               <p style={{color: 'var(--pico-color-red)', fontWeight: 'bold'}}>
-                <strong>Motivo del Rechazo:</strong> {s.motivo_rechazo}
+                Motivo del Rechazo: {s.motivo_rechazo}
               </p>
             )}
+            {/* ----------------------------------------------- */}
           </article>
         )) : <p>No hay trabajos en tu historial.</p>}
       </details>
