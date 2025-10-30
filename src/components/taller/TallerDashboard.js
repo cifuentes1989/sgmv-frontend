@@ -155,6 +155,13 @@ const TallerDashboard = () => {
             <hr/>
             <p><strong>Diagnóstico Realizado:</strong> {s.diagnostico_taller}</p>
             {s.trabajos_realizados && <p><strong>Trabajos Efectuados:</strong> {s.trabajos_realizados}</p>}
+            {s.repuestos_utilizados && <p><strong>Repuestos Utilizados:</strong> {s.repuestos_utilizados}</p>}
+            {s.observaciones_taller && <p><strong>Observaciones del Taller:</strong> {s.observaciones_taller}</p>}
+            {s.motivo_rechazo && (
+              <p style={{color: 'var(--pico-color-red)', fontWeight: 'bold'}}>
+                <strong>Motivo del Rechazo:</strong> {s.motivo_rechazo}
+              </p>
+            )}
           </article>
         )) : <p>No hay trabajos en tu historial.</p>}
       </details>

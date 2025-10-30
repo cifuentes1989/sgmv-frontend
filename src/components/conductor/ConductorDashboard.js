@@ -13,6 +13,7 @@ const ConductorDashboard = () => {
       const res = await api.get('/solicitudes/conductor');
       setSolicitudes(res.data);
     } catch (error) {
+      console.error("Error cargando solicitudes del conductor", error);
       alert("Error al cargar el historial de solicitudes.");
     }
   };
@@ -25,8 +26,13 @@ const ConductorDashboard = () => {
       return;
     }
     const firma_conductor_satisfaccion = sigCanvases[id].toDataURL();
-    await api.put(`/solicitudes/satisfaccion/${id}`, { firma_conductor_satisfaccion });
-    cargarDatos();
+    try {
+        await api.put(`/solicitudes/satisfaccion/${id}`, { firma_conductor_satisfaccion });
+        cargarDatos();
+    } catch(error) {
+        console.error("Error al confirmar satisfacción", error);
+        alert("No se pudo registrar la firma de satisfacción.")
+    }
   };
 
   return (
@@ -42,6 +48,7 @@ const ConductorDashboard = () => {
 
       {mostrarFormulario && <NuevaSolicitudForm onSolicitudCreada={() => { setMostrarFormulario(false); cargarDatos(); }} />}
       
+      <hr />
       <h4>Historial de Mis Solicitudes</h4>
       {solicitudes.length > 0 ? solicitudes.map(s => (
         <article key={s.id}>
@@ -53,27 +60,28 @@ const ConductorDashboard = () => {
           <p><strong>Necesidad Reportada:</strong> {s.necesidad_reportada}</p>
           
           {s.diagnostico_taller && (
-            <>
-              <hr />
-              <p><strong>Diagnóstico (Técnico: {s.nombre_tecnico || 'N/A'}):</strong> {s.diagnostico_taller}</p>
-              <p><strong>Hora Ingreso a Taller:</strong> {new Date(s.hora_ingreso_taller).toLocaleString('es-CO')}</p>
-            </>
+            <p><strong>Diagnóstico del Taller:</strong> {s.diagnostico_taller}</p>
           )}
+
+          {/* --- CÓDIGO AÑADIDO --- */}
+          {s.motivo_rechazo && (
+            <p style={{color: 'var(--pico-color-red)', fontWeight: 'bold', border: '1px solid var(--pico-color-red)', padding: '0.5rem', borderRadius: 'var(--pico-border-radius)'}}>
+              <strong>Motivo del Rechazo (Coordinación):</strong> {s.motivo_rechazo}
+            </p>
+          )}
+          {/* --------------------- */}
 
           {s.trabajos_realizados && (
-             <>
-              <hr />
-              <p><strong>Trabajos Realizados:</strong> {s.trabajos_realizados}</p>
-              <p><strong>Hora Salida de Taller:</strong> {new Date(s.hora_salida_taller).toLocaleString('es-CO')}</p>
-             </>
+             <p><strong>Trabajos Realizados:</strong> {s.trabajos_realizados}</p>
           )}
-
+          
           {s.estado === 'Listo para Entrega' && (
             <footer>
               <p><strong>¡Su vehículo está listo! Por favor, firme a continuación para confirmar la entrega a satisfacción.</strong></p>
               <div style={{border: '1px solid var(--pico-contrast)', borderRadius: 'var(--pico-border-radius)', width: 300, height: 150, marginBottom: '1rem'}}>
                 <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150}} />
               </div>
+              <button onClick={() => sigCanvases[s.id].clear()} className="secondary outline" style={{marginRight: '1rem'}}>Limpiar Firma</button>
               <button onClick={() => handleSatisfaccion(s.id)}>Confirmar Recepción a Satisfacción</button>
             </footer>
           )}
