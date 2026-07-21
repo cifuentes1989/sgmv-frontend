@@ -15,6 +15,10 @@ const CoordinacionDashboard = () => {
   const [porCerrar, setPorCerrar] = useState([]);
   const [historialCompleto, setHistorialCompleto] = useState([]);
   const [mensaje, setMensaje] = useState('');
+  
+  // NUEVO: ESTADO PARA EL BUSCADOR
+  const [busqueda, setBusqueda] = useState('');
+  
   const sigCanvases = {}; // Referencias para las firmas
 
   // 3. CARGA DE DATOS
@@ -39,7 +43,7 @@ const CoordinacionDashboard = () => {
     cargarDatos();
   }, []);
 
-  // --- NUEVO: CERRAR SESIÓN ---
+  // --- FUNCIÓN: CERRAR SESIÓN ---
   const handleLogout = () => {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -58,7 +62,6 @@ const CoordinacionDashboard = () => {
     // LÓGICA DE RECHAZO OBLIGATORIO
     if (decision === 'Rechazado') {
       motivo_rechazo = prompt('⚠️ Por favor, ingrese el motivo del rechazo (OBLIGATORIO):');
-      // Si cancela o lo deja vacío, no hacemos nada
       if (!motivo_rechazo || motivo_rechazo.trim() === "") {
         alert("No se puede rechazar sin un motivo.");
         return;
@@ -222,20 +225,23 @@ const CoordinacionDashboard = () => {
     return { bg: '#eeeeee', text: '#424242' };
   };
 
+  // NUEVO: Filtro para el buscador
+  const filtrarLista = (lista) => lista.filter(s => 
+      s.placa_vehiculo?.toLowerCase().includes(busqueda.toLowerCase()) || 
+      s.id?.toString().includes(busqueda) || 
+      s.nombre_vehiculo?.toLowerCase().includes(busqueda.toLowerCase())
+  );
+
   return (
     <main style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '15px', backgroundColor: '#f4f7f6', minHeight: '100vh', boxSizing: 'border-box' }}>
       
       {/* --- CABECERA RESPONSIVA --- */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '15px' }}>
           <div>
-              <h2 style={{ margin: 0, fontSize: '1.3rem', color: '#333' }}>
-                  Bienvenido, {nombreUsuario}
-              </h2>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#333' }}>{nombreUsuario}</h2>
               <span style={{ fontSize: '0.85rem', color: '#666' }}>Coordinación | Sede: {nombreSede}</span>
           </div>
-          <button 
-              onClick={handleLogout} 
-              style={{ backgroundColor: 'transparent', border: '1px solid #dc3545', color: '#dc3545', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+          <button onClick={handleLogout} style={{ backgroundColor: 'transparent', border: '1px solid #dc3545', color: '#dc3545', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
               Salir
           </button>
       </header>
@@ -246,44 +252,56 @@ const CoordinacionDashboard = () => {
           </div>
       )}
 
+      {/* --- BUSCADOR FLOTANTE --- */}
+      <div style={{ marginBottom: '20px' }}>
+          <input 
+            type="search" placeholder="🔍 Buscar por Placa, Vehículo o ID..." 
+            value={busqueda} onChange={e => setBusqueda(e.target.value)}
+            style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #ddd', fontSize: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', boxSizing: 'border-box' }}
+          />
+      </div>
+
       {/* 1. APROBACIONES PENDIENTES */}
       <details open style={{ marginBottom: '20px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
         <summary style={{ padding: '15px', backgroundColor: '#fff3e0', color: '#e65100', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', outline: 'none' }}>
-            ⚖️ Solicitudes por Aprobar ({porAprobar.length})
+            ⚖️ Solicitudes por Aprobar ({filtrarLista(porAprobar).length})
         </summary>
         <div style={{ padding: '15px' }}>
-            {porAprobar.length > 0 ? porAprobar.map(s => (
-            <div key={s.id} style={{ borderBottom: '1px solid #eee', paddingBottom: '20px', marginBottom: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <strong style={{ fontSize: '1.1rem', color: '#333' }}>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong>
-                    <span style={{ fontSize: '0.8rem', color: '#888' }}>ID #{s.id}</span>
-                </div>
-                
-                <div style={{ marginBottom: '10px', fontSize: '0.9rem', color: '#555' }}>
-                    <p style={{ margin: '0 0 5px 0' }}><strong>Conductor:</strong> {s.nombre_conductor}</p>
-                    <p style={{ margin: '0' }}><strong>Necesidad Inicial:</strong> {s.necesidad_reportada}</p>
-                </div>
+            {filtrarLista(porAprobar).length > 0 ? filtrarLista(porAprobar).map(s => (
+            
+            /* TARJETA COMPACTA (ACORDEÓN) */
+            <details key={s.id} style={{ backgroundColor: '#f9f9f9', marginBottom: '10px', borderRadius: '8px', border: '1px solid #eee' }}>
+                <summary style={{ padding: '12px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', cursor: 'pointer', outline: 'none' }}>
+                    <span>{s.placa_vehiculo} <small style={{color: '#0d47a1', marginLeft: '5px'}}>⏳ Revisar Diagnóstico</small></span>
+                    <span style={{color: '#888'}}>ID #{s.id}</span>
+                </summary>
 
-                {/* CUADRO RESALTADO: EL DIAGNÓSTICO DEL TALLER */}
-                <div style={{ backgroundColor: '#e3f2fd', borderLeft: '4px solid #1565c0', padding: '12px', borderRadius: '0 8px 8px 0', fontSize: '0.95rem', marginBottom: '15px' }}>
-                    <p style={{ margin: 0, color: '#0d47a1' }}><strong>🛠️ Diagnóstico Taller:</strong> {s.diagnostico_taller}</p>
+                <div style={{ padding: '15px', borderTop: '1px solid #eee' }}>
+                    <p style={{ margin: '0 0 5px 0' }}><strong>Vehículo:</strong> {s.nombre_vehiculo}</p>
+                    <p style={{ margin: '0 0 5px 0' }}><strong>Conductor:</strong> {s.nombre_conductor}</p>
+                    <p style={{ margin: '0 0 10px 0' }}><strong>Falla Inicial:</strong> {s.necesidad_reportada}</p>
+
+                    {/* CUADRO RESALTADO: EL DIAGNÓSTICO DEL TALLER */}
+                    <div style={{ backgroundColor: '#e3f2fd', borderLeft: '4px solid #1565c0', padding: '12px', borderRadius: '0 8px 8px 0', fontSize: '0.95rem', marginBottom: '15px' }}>
+                        <p style={{ margin: 0, color: '#0d47a1' }}><strong>🛠️ Diagnóstico Taller:</strong> {s.diagnostico_taller}</p>
+                    </div>
+                    
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.9rem' }}>Su Firma para Decisión:</label>
+                    <div style={{ border: '2px dashed #ccc', borderRadius: '8px', width: '100%', maxWidth: '300px', height: '150px', backgroundColor: 'white', margin: '0 auto 15px auto', display: 'flex', justifyContent: 'center' }}>
+                        <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150, className: 'sigCanvas'}} />
+                    </div>
+                    
+                    {/* BOTONES LADO A LADO PARA CELULAR */}
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <button onClick={() => handleDecision(s.id, 'Rechazado')} style={{ flex: 1, padding: '12px', backgroundColor: 'transparent', color: '#d32f2f', border: '2px solid #d32f2f', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>
+                            ❌ Rechazar
+                        </button>
+                        <button onClick={() => handleDecision(s.id, 'Aprobado')} style={{ flex: 1.5, padding: '12px', backgroundColor: '#2e7d32', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>
+                            ✅ Aprobar
+                        </button>
+                    </div>
                 </div>
-                
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.9rem' }}>Su Firma para Decisión:</label>
-                <div style={{ border: '2px dashed #ccc', borderRadius: '8px', width: '100%', maxWidth: '300px', height: '150px', backgroundColor: 'white', margin: '0 auto 15px auto', display: 'flex', justifyContent: 'center' }}>
-                    <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150, className: 'sigCanvas'}} />
-                </div>
-                
-                {/* BOTONES LADO A LADO PARA CELULAR */}
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={() => handleDecision(s.id, 'Rechazado')} style={{ flex: 1, padding: '12px', backgroundColor: 'transparent', color: '#d32f2f', border: '2px solid #d32f2f', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>
-                        ❌ Rechazar
-                    </button>
-                    <button onClick={() => handleDecision(s.id, 'Aprobado')} style={{ flex: 1.5, padding: '12px', backgroundColor: '#2e7d32', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>
-                        ✅ Aprobar
-                    </button>
-                </div>
-            </div>
+            </details>
             )) : <p style={{ color: '#888', textAlign: 'center', padding: '10px' }}>No hay solicitudes pendientes de aprobación.</p>}
         </div>
       </details>
@@ -291,41 +309,46 @@ const CoordinacionDashboard = () => {
       {/* 2. CIERRES PENDIENTES */}
       <details open style={{ marginBottom: '20px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
         <summary style={{ padding: '15px', backgroundColor: '#e8f5e9', color: '#2e7d32', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', outline: 'none' }}>
-            🔒 Procesos Pendientes de Cierre ({porCerrar.length})
+            🔒 Procesos Pendientes de Cierre ({filtrarLista(porCerrar).length})
         </summary>
         <div style={{ padding: '15px' }}>
-            {porCerrar.length > 0 ? porCerrar.map(s => (
-            <div key={s.id} style={{ borderBottom: '1px solid #eee', paddingBottom: '20px', marginBottom: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <strong style={{ fontSize: '1.1rem', color: '#333' }}>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong>
-                    <span style={{ fontSize: '0.8rem', color: '#888' }}>ID #{s.id}</span>
+            {filtrarLista(porCerrar).length > 0 ? filtrarLista(porCerrar).map(s => (
+            
+            /* TARJETA COMPACTA */
+            <details key={s.id} style={{ backgroundColor: '#f9f9f9', marginBottom: '10px', borderRadius: '8px', border: '1px solid #eee' }}>
+                <summary style={{ padding: '12px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', cursor: 'pointer', outline: 'none' }}>
+                    <span>{s.placa_vehiculo} <small style={{color: '#2e7d32', marginLeft: '5px'}}>✔️ Listo para cierre</small></span>
+                    <span style={{color: '#888'}}>ID #{s.id}</span>
+                </summary>
+
+                <div style={{ padding: '15px', borderTop: '1px solid #eee' }}>
+                    <p style={{ margin: '0 0 5px 0' }}><strong>Vehículo:</strong> {s.nombre_vehiculo}</p>
+                    <div style={{ backgroundColor: '#f5f5f5', padding: '12px', borderRadius: '8px', marginBottom: '15px', borderLeft: '3px solid #ccc' }}>
+                        <p style={{ margin: '0 0 5px 0', fontSize: '0.85rem', color: '#555' }}><strong>Feedback del Conductor al Recibir:</strong></p>
+                        <p style={{ margin: 0, fontStyle: 'italic', color: '#333' }}>"{s.observaciones_entrega_conductor || "Sin observaciones"}"</p>
+                    </div>
+                    
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.9rem' }}>Firma de Cierre Final:</label>
+                    <div style={{ border: '2px dashed #ccc', borderRadius: '8px', width: '100%', maxWidth: '300px', height: '150px', backgroundColor: 'white', margin: '0 auto 15px auto', display: 'flex', justifyContent: 'center' }}>
+                        <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150, className: 'sigCanvas'}} />
+                    </div>
+                    
+                    <button onClick={() => handleCierre(s.id)} style={{ width: '100%', padding: '14px', backgroundColor: '#37474f', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                        🗄️ Firmar y Archivar Caso
+                    </button>
                 </div>
-                
-                <div style={{ backgroundColor: '#f5f5f5', padding: '12px', borderRadius: '8px', marginBottom: '15px' }}>
-                    <p style={{ margin: '0 0 5px 0', fontSize: '0.85rem', color: '#555' }}><strong>Feedback del Conductor al Recibir:</strong></p>
-                    <p style={{ margin: 0, fontStyle: 'italic', color: '#333' }}>"{s.observaciones_entrega_conductor || "Sin observaciones"}"</p>
-                </div>
-                
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.9rem' }}>Firma de Cierre Final:</label>
-                <div style={{ border: '2px dashed #ccc', borderRadius: '8px', width: '100%', maxWidth: '300px', height: '150px', backgroundColor: 'white', margin: '0 auto 15px auto', display: 'flex', justifyContent: 'center' }}>
-                    <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150, className: 'sigCanvas'}} />
-                </div>
-                
-                <button onClick={() => handleCierre(s.id)} style={{ width: '100%', padding: '14px', backgroundColor: '#37474f', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                    🗄️ Firmar y Archivar Caso
-                </button>
-            </div>
+            </details>
             )) : <p style={{ color: '#888', textAlign: 'center', padding: '10px' }}>No hay procesos pendientes de cierre.</p>}
         </div>
       </details>
 
-      {/* 3. HISTORIAL COMPLETO CON TRAZABILIDAD VISUAL */}
+      {/* 3. HISTORIAL COMPLETO CON NUEVA LÍNEA DE TIEMPO */}
       <details style={{ marginBottom: '20px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
         <summary style={{ padding: '15px', backgroundColor: '#eeeeee', color: '#424242', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', outline: 'none' }}>
-            📚 Historial Completo de Solicitudes ({historialCompleto.length})
+            📚 Historial Completo ({filtrarLista(historialCompleto).length})
         </summary>
         <div style={{ padding: '15px' }}>
-            {historialCompleto.length > 0 ? historialCompleto.map(s => {
+            {filtrarLista(historialCompleto).length > 0 ? filtrarLista(historialCompleto).map(s => {
                 const colores = getStatusColor(s.estado);
                 return (
                 <div key={s.id} style={{ borderBottom: '1px solid #eee', paddingBottom: '20px', marginBottom: '15px' }}>
@@ -336,29 +359,67 @@ const CoordinacionDashboard = () => {
                         </span>
                     </div>
                     
-                    <details style={{ outline: 'none' }}>
-                        <summary style={{ cursor: 'pointer', color: '#0288d1', fontSize: '0.9rem', fontWeight: 'bold', padding: '5px 0' }}>
-                            Ver Trazabilidad Completa
+                    {/* --- LÍNEA DE TIEMPO DE TRAZABILIDAD --- */}
+                    <details style={{ outline: 'none', marginTop: '10px' }}>
+                        <summary style={{ cursor: 'pointer', color: '#0288d1', fontSize: '0.9rem', fontWeight: '600', padding: '5px 0' }}>
+                            ⏳ Ver Trazabilidad y Tiempos
                         </summary>
-                        <div style={{ padding: '12px', borderLeft: '3px solid #0288d1', marginTop: '10px', fontSize: '0.85rem', color: '#444', backgroundColor: '#fafafa', borderRadius: '0 8px 8px 0' }}>
-                            
-                            <p style={{ margin: '0 0 5px 0' }}><strong>1️⃣ Solicitud Inicial:</strong> {s.necesidad_reportada}</p>
-                            
-                            {s.diagnostico_taller && (
-                                <p style={{ margin: '5px 0' }}><strong>2️⃣ Diagnóstico Taller:</strong> {s.diagnostico_taller}</p>
-                            )}
+                        <div style={{ padding: '15px 12px', marginTop: '10px', backgroundColor: '#f9f9f9', borderRadius: '8px', fontSize: '0.85rem', color: '#444' }}>
+                            <div style={{ borderLeft: '2px solid #ccc', paddingLeft: '15px', marginLeft: '5px' }}>
+                                
+                                <div style={{ position: 'relative', marginBottom: '15px' }}>
+                                    <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#0288d1', fontSize: '1rem' }}>●</span>
+                                    <p style={{ margin: 0, color: '#0288d1' }}><strong>1️⃣ Solicitud Inicial</strong></p>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                                        📅 {new Date(s.fecha_creacion).toLocaleString('es-CO')}
+                                    </p>
+                                    <p style={{ margin: '4px 0 0 0' }}>{s.necesidad_reportada} <br/><small>(Por: {s.nombre_conductor})</small></p>
+                                </div>
 
-                            {s.fecha_aprobacion_rechazo && (
-                                <p style={{ margin: '5px 0' }}><strong>3️⃣ Decisión:</strong> {s.motivo_rechazo ? <span style={{color:'#d32f2f'}}>Rechazado ({s.motivo_rechazo})</span> : <span style={{color:'#2e7d32'}}>Aprobado</span>}</p>
-                            )}
+                                {s.diagnostico_taller && (
+                                <div style={{ position: 'relative', marginBottom: '15px' }}>
+                                    <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#f57c00', fontSize: '1rem' }}>●</span>
+                                    <p style={{ margin: 0, color: '#f57c00' }}><strong>2️⃣ Diagnóstico Taller</strong></p>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                                        📅 {s.hora_ingreso_taller ? new Date(s.hora_ingreso_taller).toLocaleString('es-CO') : 'Sin fecha registrada'}
+                                    </p>
+                                    <p style={{ margin: '4px 0 0 0' }}>{s.diagnostico_taller} <br/><small>(Técnico: {s.nombre_tecnico})</small></p>
+                                </div>
+                                )}
 
-                            {s.trabajos_realizados && (
-                                <p style={{ margin: '5px 0' }}><strong>4️⃣ Reparación:</strong> {s.trabajos_realizados} <br/><small>Repuestos: {s.repuestos_utilizados || 'Ninguno'}</small></p>
-                            )}
+                                {s.fecha_aprobacion_rechazo && (
+                                <div style={{ position: 'relative', marginBottom: '15px' }}>
+                                    <span style={{ position: 'absolute', left: '-22px', top: '2px', color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1rem' }}>●</span>
+                                    <p style={{ margin: 0, color: s.motivo_rechazo ? '#d32f2f' : '#388e3c' }}><strong>3️⃣ Decisión Coordinación</strong></p>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                                        📅 {new Date(s.fecha_aprobacion_rechazo).toLocaleString('es-CO')}
+                                    </p>
+                                    <p style={{ margin: '4px 0 0 0' }}>{s.motivo_rechazo ? `Rechazado: ${s.motivo_rechazo}` : 'Aprobado'} <br/><small>(Coord: {s.nombre_coordinador})</small></p>
+                                </div>
+                                )}
 
-                            {s.fecha_cierre_proceso && (
-                                <p style={{ margin: '5px 0 0 0' }}><strong>5️⃣ Cierre Final:</strong> {new Date(s.fecha_cierre_proceso).toLocaleDateString('es-CO')}</p>
-                            )}
+                                {s.trabajos_realizados && (
+                                <div style={{ position: 'relative', marginBottom: '15px' }}>
+                                    <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#1976d2', fontSize: '1rem' }}>●</span>
+                                    <p style={{ margin: 0, color: '#1976d2' }}><strong>4️⃣ Reparación Realizada</strong></p>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                                        📅 {s.hora_salida_taller ? new Date(s.hora_salida_taller).toLocaleString('es-CO') : 'Sin fecha registrada'}
+                                    </p>
+                                    <p style={{ margin: '4px 0 0 0' }}>{s.trabajos_realizados} <br/><small>Repuestos: {s.repuestos_utilizados || 'Ninguno'}</small></p>
+                                </div>
+                                )}
+
+                                {s.fecha_cierre_proceso && (
+                                <div style={{ position: 'relative', marginBottom: '0' }}>
+                                    <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#388e3c', fontSize: '1rem' }}>●</span>
+                                    <p style={{ margin: 0, color: '#388e3c' }}><strong>5️⃣ Cierre del Proceso</strong></p>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                                        📅 {new Date(s.fecha_cierre_proceso).toLocaleString('es-CO')}
+                                    </p>
+                                    <p style={{ margin: '4px 0 0 0' }}>Observaciones: {s.observaciones_entrega_conductor || 'Ninguna'}</p>
+                                </div>
+                                )}
+                            </div>
                         </div>
                     </details>
 

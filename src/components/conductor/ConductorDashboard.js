@@ -141,27 +141,76 @@ const ConductorDashboard = () => {
                         </div>
                       )}
                       
-                      {/* TRAZABILIDAD (OCULTA POR DEFECTO) */}
-                      <details style={{ outline: 'none', marginTop: '10px' }}>
-                          <summary style={{ cursor: 'pointer', color: '#0288d1', fontSize: '0.9rem', fontWeight: '600', padding: '5px 0' }}>
-                              Ver Trazabilidad Completa
-                          </summary>
-                          <div style={{ padding: '12px', marginTop: '10px', backgroundColor: '#f9f9f9', borderRadius: '8px', fontSize: '0.85rem', color: '#444' }}>
-                              <p><strong>1️⃣ Solicitud Inicial:</strong> {s.necesidad_reportada}</p>
-                              {s.diagnostico_taller && (
-                                  <p style={{marginTop: '8px'}}><strong>2️⃣ Diagnóstico Taller:</strong> {s.diagnostico_taller} <br/><small>(Técnico: {s.nombre_tecnico})</small></p>
-                              )}
-                              {s.fecha_aprobacion_rechazo && (
-                                  <p style={{marginTop: '8px'}}><strong>3️⃣ Decisión Coordinación:</strong> {s.motivo_rechazo ? 'Rechazado' : 'Aprobado'} <br/><small>(Coord: {s.nombre_coordinador})</small></p>
-                              )}
-                              {s.trabajos_realizados && (
-                                  <p style={{marginTop: '8px'}}><strong>4️⃣ Reparación Realizada:</strong> {s.trabajos_realizados} <br/><small>Repuestos: {s.repuestos_utilizados || 'Ninguno'}</small></p>
-                              )}
-                              {s.fecha_cierre_proceso && (
-                                  <p style={{marginTop: '8px'}}><strong>5️⃣ Cierre del Proceso:</strong> {new Date(s.fecha_cierre_proceso).toLocaleDateString('es-CO')} <br/><small>Obs: {s.observaciones_entrega_conductor || 'Ninguna'}</small></p>
-                              )}
-                          </div>
-                      </details>
+                      {/* --- LÍNEA DE TIEMPO DE TRAZABILIDAD (APLICA PARA LAS 3 VISTAS) --- */}
+<details style={{ outline: 'none', marginTop: '10px' }}>
+    <summary style={{ cursor: 'pointer', color: '#0288d1', fontSize: '0.9rem', fontWeight: '600', padding: '5px 0' }}>
+        ⏳ Ver Trazabilidad y Tiempos
+    </summary>
+    <div style={{ padding: '15px 12px', marginTop: '10px', backgroundColor: '#f9f9f9', borderRadius: '8px', fontSize: '0.85rem', color: '#444' }}>
+        
+        {/* Borde vertical gris que conecta los puntos */}
+        <div style={{ borderLeft: '2px solid #ccc', paddingLeft: '15px', marginLeft: '5px' }}>
+            
+            {/* PASO 1: CREACIÓN */}
+            <div style={{ position: 'relative', marginBottom: '15px' }}>
+                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#0288d1', fontSize: '1rem' }}>●</span>
+                <p style={{ margin: 0, color: '#0288d1' }}><strong>1️⃣ Solicitud Inicial</strong></p>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                    📅 {new Date(s.fecha_creacion).toLocaleString('es-CO')}
+                </p>
+                <p style={{ margin: '4px 0 0 0' }}>{s.necesidad_reportada} <br/><small>(Por: {s.nombre_conductor})</small></p>
+            </div>
+
+            {/* PASO 2: DIAGNÓSTICO */}
+            {s.diagnostico_taller && (
+            <div style={{ position: 'relative', marginBottom: '15px' }}>
+                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#f57c00', fontSize: '1rem' }}>●</span>
+                <p style={{ margin: 0, color: '#f57c00' }}><strong>2️⃣ Diagnóstico Taller</strong></p>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                    📅 {s.hora_ingreso_taller ? new Date(s.hora_ingreso_taller).toLocaleString('es-CO') : 'Sin fecha registrada'}
+                </p>
+                <p style={{ margin: '4px 0 0 0' }}>{s.diagnostico_taller} <br/><small>(Técnico: {s.nombre_tecnico})</small></p>
+            </div>
+            )}
+
+            {/* PASO 3: DECISIÓN */}
+            {s.fecha_aprobacion_rechazo && (
+            <div style={{ position: 'relative', marginBottom: '15px' }}>
+                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1rem' }}>●</span>
+                <p style={{ margin: 0, color: s.motivo_rechazo ? '#d32f2f' : '#388e3c' }}><strong>3️⃣ Decisión Coordinación</strong></p>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                    📅 {new Date(s.fecha_aprobacion_rechazo).toLocaleString('es-CO')}
+                </p>
+                <p style={{ margin: '4px 0 0 0' }}>{s.motivo_rechazo ? `Rechazado: ${s.motivo_rechazo}` : 'Aprobado'} <br/><small>(Coord: {s.nombre_coordinador})</small></p>
+            </div>
+            )}
+
+            {/* PASO 4: REPARACIÓN */}
+            {s.trabajos_realizados && (
+            <div style={{ position: 'relative', marginBottom: '15px' }}>
+                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#1976d2', fontSize: '1rem' }}>●</span>
+                <p style={{ margin: 0, color: '#1976d2' }}><strong>4️⃣ Reparación Realizada</strong></p>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                    📅 {s.hora_salida_taller ? new Date(s.hora_salida_taller).toLocaleString('es-CO') : 'Sin fecha registrada'}
+                </p>
+                <p style={{ margin: '4px 0 0 0' }}>{s.trabajos_realizados} <br/><small>Repuestos: {s.repuestos_utilizados || 'Ninguno'}</small></p>
+            </div>
+            )}
+
+            {/* PASO 5: CIERRE */}
+            {s.fecha_cierre_proceso && (
+            <div style={{ position: 'relative', marginBottom: '0' }}>
+                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#388e3c', fontSize: '1rem' }}>●</span>
+                <p style={{ margin: 0, color: '#388e3c' }}><strong>5️⃣ Cierre del Proceso</strong></p>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
+                    📅 {new Date(s.fecha_cierre_proceso).toLocaleString('es-CO')}
+                </p>
+                <p style={{ margin: '4px 0 0 0' }}>Observaciones: {s.observaciones_entrega_conductor || 'Ninguna'}</p>
+            </div>
+            )}
+        </div>
+    </div>
+</details>
 
                       {/* SECCIÓN DE CONFIRMACIÓN DE ENTREGA (FIRMA) */}
                       {s.estado === 'Listo para Entrega' && (
