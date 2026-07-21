@@ -22,6 +22,10 @@ const AdminDashboard = () => {
     const [datosInforme, setDatosInforme] = useState(null);
     const [fechas, setFechas] = useState({ inicio: '', fin: '' });
     
+    // --- NUEVOS ESTADOS PARA BÚSQUEDA ---
+    const [busquedaUsuario, setBusquedaUsuario] = useState('');
+    const [busquedaVehiculo, setBusquedaVehiculo] = useState('');
+    
     const [nuevoUsuario, setNuevoUsuario] = useState({ nombre_completo: '', email: '', password: '', rol: 'Conductor', sede_id: '' });
     const [nuevoVehiculo, setNuevoVehiculo] = useState({ nombre: '', placa: '', marca: '', modelo: '', sede_id: '' });
 
@@ -110,16 +114,11 @@ const AdminDashboard = () => {
         } catch (error) { alert(`Error: ${error.response?.data?.msg || error.message || 'Error desconocido'}`); }
     };
 
-    // --- NUEVO HANDLER: CAMBIAR SEDE DE VEHÍCULO ---
     const handleCambiarSedeVehiculo = async (vehiculoId, nuevaSedeId) => {
         try {
-            // Hacemos la petición PUT al backend
             await api.put(`/vehiculos/${vehiculoId}/sede`, { sede_id: nuevaSedeId });
-            
-            // Refrescamos la lista de vehículos para ver el cambio reflejado
             const res = await api.get('/vehiculos'); 
             setVehiculos(res.data);
-            
             alert('Sede actualizada correctamente');
         } catch (error) {
             console.error(error);
@@ -137,6 +136,18 @@ const AdminDashboard = () => {
             alert("No se pudo generar el informe.");
         }
     };
+
+    // --- LÓGICA DE BÚSQUEDA EN TIEMPO REAL ---
+    const usuariosFiltrados = usuarios.filter(u => 
+        u.nombre_completo?.toLowerCase().includes(busquedaUsuario.toLowerCase()) ||
+        u.email?.toLowerCase().includes(busquedaUsuario.toLowerCase()) ||
+        u.rol?.toLowerCase().includes(busquedaUsuario.toLowerCase())
+    );
+
+    const vehiculosFiltrados = vehiculos.filter(v => 
+        v.nombre?.toLowerCase().includes(busquedaVehiculo.toLowerCase()) ||
+        v.placa?.toLowerCase().includes(busquedaVehiculo.toLowerCase())
+    );
 
     // Datos para los gráficos
     const chartDataEstado = {
@@ -241,10 +252,34 @@ const AdminDashboard = () => {
                         <button type="submit" style={{marginTop: '1rem'}}>Crear Usuario</button>
                     </form>
                     <hr/>
+                    
+                    {/* BUSCADOR DE USUARIOS */}
+                    <div style={{ marginBottom: '1rem' }}>
+                        <input 
+                            type="search" 
+                            placeholder="🔍 Buscar por nombre, email o rol..." 
+                            value={busquedaUsuario}
+                            onChange={(e) => setBusquedaUsuario(e.target.value)}
+                        />
+                    </div>
+
                     <figure>
                         <table>
                            <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Sede</th></tr></thead>
-                            <tbody>{usuarios.map(u => <tr key={u.id}><td>{u.nombre_completo}</td><td>{u.email}</td><td>{u.rol}</td><td>{u.nombre_sede || 'N/A'}</td></tr>)}</tbody>
+                            <tbody>
+                                {usuariosFiltrados.length > 0 ? (
+                                    usuariosFiltrados.map(u => (
+                                        <tr key={u.id}>
+                                            <td>{u.nombre_completo}</td>
+                                            <td>{u.email}</td>
+                                            <td>{u.rol}</td>
+                                            <td>{u.nombre_sede || 'N/A'}</td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr><td colSpan="4" style={{textAlign: 'center'}}>No se encontraron usuarios.</td></tr>
+                                )}
+                            </tbody>
                         </table>
                     </figure>
                 </article>
@@ -267,31 +302,45 @@ const AdminDashboard = () => {
                          <button type="submit" style={{marginTop: '1rem'}}>Crear Vehículo</button>
                     </form>
                     <hr/>
+
+                    {/* BUSCADOR DE VEHÍCULOS */}
+                    <div style={{ marginBottom: '1rem' }}>
+                        <input 
+                            type="search" 
+                            placeholder="🔍 Buscar por nombre o placa..." 
+                            value={busquedaVehiculo}
+                            onChange={(e) => setBusquedaVehiculo(e.target.value)}
+                        />
+                    </div>
+
                     <figure>
                         <table>
                             <thead><tr><th>Nombre</th><th>Placa</th><th>Sede</th></tr></thead>
                             <tbody>
-                                {vehiculos.map(v => (
-                                    <tr key={v.id}>
-                                        <td>{v.nombre}</td>
-                                        <td>{v.placa}</td>
-                                        {/* --- MODIFICACIÓN: SELECT DINÁMICO PARA CAMBIAR SEDE --- */}
-                                        <td>
-                                            <select 
-                                                value={v.sede_id || ''} 
-                                                onChange={(e) => handleCambiarSedeVehiculo(v.id, e.target.value)}
-                                                style={{ padding: '5px', borderRadius: '4px', margin: 0, width: 'auto' }}
-                                            >
-                                                <option value="" disabled>Seleccionar...</option>
-                                                {sedes.map(sede => (
-                                                    <option key={sede.id} value={sede.id}>
-                                                        {sede.nombre}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {vehiculosFiltrados.length > 0 ? (
+                                    vehiculosFiltrados.map(v => (
+                                        <tr key={v.id}>
+                                            <td>{v.nombre}</td>
+                                            <td>{v.placa}</td>
+                                            <td>
+                                                <select 
+                                                    value={v.sede_id || ''} 
+                                                    onChange={(e) => handleCambiarSedeVehiculo(v.id, e.target.value)}
+                                                    style={{ padding: '5px', borderRadius: '4px', margin: 0, width: 'auto' }}
+                                                >
+                                                    <option value="" disabled>Seleccionar...</option>
+                                                    {sedes.map(sede => (
+                                                        <option key={sede.id} value={sede.id}>
+                                                            {sede.nombre}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr><td colSpan="3" style={{textAlign: 'center'}}>No se encontraron vehículos.</td></tr>
+                                )}
                             </tbody>
                         </table>
                     </figure>
