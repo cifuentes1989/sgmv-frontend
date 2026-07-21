@@ -110,6 +110,23 @@ const AdminDashboard = () => {
         } catch (error) { alert(`Error: ${error.response?.data?.msg || error.message || 'Error desconocido'}`); }
     };
 
+    // --- NUEVO HANDLER: CAMBIAR SEDE DE VEHÍCULO ---
+    const handleCambiarSedeVehiculo = async (vehiculoId, nuevaSedeId) => {
+        try {
+            // Hacemos la petición PUT al backend
+            await api.put(`/vehiculos/${vehiculoId}/sede`, { sede_id: nuevaSedeId });
+            
+            // Refrescamos la lista de vehículos para ver el cambio reflejado
+            const res = await api.get('/vehiculos'); 
+            setVehiculos(res.data);
+            
+            alert('Sede actualizada correctamente');
+        } catch (error) {
+            console.error(error);
+            alert('Error al cambiar la sede del vehículo');
+        }
+    };
+
     const generarInforme = async () => {
         if (!fechas.inicio || !fechas.fin) return alert("Por favor, selecciona un rango de fechas.");
         try {
@@ -258,7 +275,21 @@ const AdminDashboard = () => {
                                     <tr key={v.id}>
                                         <td>{v.nombre}</td>
                                         <td>{v.placa}</td>
-                                        <td>{v.nombre_sede || 'N/A'}</td>
+                                        {/* --- MODIFICACIÓN: SELECT DINÁMICO PARA CAMBIAR SEDE --- */}
+                                        <td>
+                                            <select 
+                                                value={v.sede_id || ''} 
+                                                onChange={(e) => handleCambiarSedeVehiculo(v.id, e.target.value)}
+                                                style={{ padding: '5px', borderRadius: '4px', margin: 0, width: 'auto' }}
+                                            >
+                                                <option value="" disabled>Seleccionar...</option>
+                                                {sedes.map(sede => (
+                                                    <option key={sede.id} value={sede.id}>
+                                                        {sede.nombre}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
