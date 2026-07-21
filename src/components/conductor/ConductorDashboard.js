@@ -1,211 +1,266 @@
 import React, { useState, useEffect } from 'react';
-import NuevaSolicitudForm from './NuevaSolicitudForm';
-import api from '../../api/axios';
-import SignatureCanvas from 'react-signature-canvas';
+import api from '../../api/axios'; // Verifica que esta ruta coincida con tu estructura
 
 const ConductorDashboard = () => {
-  // 1. LÓGICA DE USUARIO Y SEDE
-  const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : { nombre_completo: 'Conductor', sede_id: null };
-  // Intentamos obtener el nombre completo, si no existe, el nombre corto, si no, un genérico.
-  const nombreUsuario = user.nombre_completo || user.nombre || 'Conductor';
-  const nombreSede = user.sede_id === 1 ? 'Florencia' : user.sede_id === 2 ? 'Popayán' : 'General';
+    // Estados originales
+    const [solicitudes, setSolicitudes] = useState([]);
+    const [usuario, setUsuario] = useState({});
+    
+    // --- NUEVOS ESTADOS PARA EL FORMULARIO ---
+    const [vehiculos, setVehiculos] = useState([]);
+    const [mostrarFormulario, setMostrarFormulario] = useState(false);
+    const [nuevaSolicitud, setNuevaSolicitud] = useState({
+        vehiculo_id: '',
+        necesidad_reportada: ''
+    });
+    const [cargando, setCargando] = useState(false);
 
-  // 2. ESTADOS
-  const [solicitudes, setSolicitudes] = useState([]);
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [observacionesInputs, setObservacionesInputs] = useState({}); 
-  const sigCanvases = {}; // Referencias para las firmas
+    useEffect(() => {
+        // --- 1. SOLUCIÓN AL BUG DEL NOMBRE ---
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+            setUsuario(JSON.parse(storedUser));
+        }
 
-  // 3. CARGA DE DATOS
-  const cargarDatos = async () => {
-    try {
-      const res = await api.get('/solicitudes/conductor');
-      setSolicitudes(res.data);
-    } catch (error) {
-      console.error("Error cargando solicitudes del conductor", error);
-      alert("Error al cargar el historial de solicitudes. Verifique su conexión.");
-    }
-  };
+        // --- 2. CARGAR SOLICITUDES ---
+        const cargarSolicitudes = async () => {
+            try {
+                const res = await api.get('/conductor/solicitudes'); 
+                setSolicitudes(res.data);
+            } catch (error) {
+                console.error("Error al cargar solicitudes", error);
+            }
+        };
 
-  useEffect(() => { cargarDatos(); }, []);
-  
-  // 4. MANEJO DE LA CONFIRMACIÓN DE ENTREGA
-  const handleSatisfaccion = async (id) => {
-    // Validación de firma
-    if (sigCanvases[id].isEmpty()) {
-      alert("Por favor, firme para confirmar la recepción del vehículo.");
-      return;
-    }
+        // --- 3. NUEVO: CARGAR VEHÍCULOS PARA EL SELECT ---
+        const cargarVehiculos = async () => {
+            try {
+                const res = await api.get('/vehiculos'); 
+                setVehiculos(res.data);
+            } catch (error) {
+                console.error("Error al cargar vehículos", error);
+            }
+        };
 
-    const observacionTexto = observacionesInputs[id] || '';
-    const firma_conductor_satisfaccion = sigCanvases[id].toDataURL();
+        cargarSolicitudes();
+        cargarVehiculos();
+    }, []);
 
-    try {
-        await api.put(`/solicitudes/satisfaccion/${id}`, { 
-            firma_conductor_satisfaccion,
-            observaciones_entrega_conductor: observacionTexto 
-        });
+    // Función para cerrar sesión
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/';
+    };
+
+    // --- NUEVO: FUNCIÓN PARA ENVIAR LA SOLICITUD ---
+    const handleCrearSolicitud = async (e) => {
+        e.preventDefault();
         
-        // Limpiar campo de texto local
-        setObservacionesInputs(prev => ({ ...prev, [id]: '' }));
-        
-        cargarDatos();
-        alert("Entrega confirmada correctamente. El proceso ha pasado a cierre administrativo.");
-    } catch(error) {
-        console.error("Error al confirmar satisfacción", error);
-        alert("No se pudo registrar la confirmación.");
-    }
-  };
+        if (!nuevaSolicitud.vehiculo_id || !nuevaSolicitud.necesidad_reportada) {
+            return alert("Por favor, selecciona un vehículo y describe la necesidad.");
+        }
 
-  // Manejo del input de texto para observaciones
-  const handleObservacionChange = (id, texto) => {
-    setObservacionesInputs(prev => ({ ...prev, [id]: texto }));
-  };
+        setCargando(true);
+        try {
+            await api.post('/conductor/solicitudes', nuevaSolicitud);
+            alert("✅ Solicitud creada con éxito.");
+            
+            // Recargar la lista y cerrar el modal
+            const res = await api.get('/conductor/solicitudes'); 
+            setSolicitudes(res.data);
+            setMostrarFormulario(false);
+            setNuevaSolicitud({ vehiculo_id: '', necesidad_reportada: '' }); // Limpiar formulario
+            
+        } catch (error) {
+            console.error(error);
+            alert(`Error: ${error.response?.data?.msg || "No se pudo crear la solicitud"}`);
+        } finally {
+            setCargando(false);
+        }
+    };
 
-  return (
-    <main className="container">
-      <hgroup>
-        {/* ENCABEZADO PERSONALIZADO */}
-        <h3>Bienvenido, {nombreUsuario}</h3>
-        <p>Panel de Conductor | Sede: <strong>{nombreSede}</strong></p>
-        <p>Gestione sus solicitudes y confirme la recepción de vehículos.</p>
-      </hgroup>
-      
-      <button 
-        onClick={() => setMostrarFormulario(!mostrarFormulario)} 
-        style={{marginBottom: '2rem'}}
-        className={mostrarFormulario ? "secondary" : ""}
-      >
-        {mostrarFormulario ? 'Ocultar Formulario' : 'Crear Nueva Solicitud'}
-      </button>
+    // --- FUNCIÓN PARA DARLE COLOR A LAS ETIQUETAS DE ESTADO ---
+    const getStatusColor = (estado) => {
+        const status = estado?.toLowerCase() || '';
+        if (status.includes('pendiente')) return { bg: '#fff3e0', text: '#e65100' }; // Naranja
+        if (status.includes('taller') || status.includes('aprobado')) return { bg: '#e3f2fd', text: '#1565c0' }; // Azul
+        if (status.includes('rechazado')) return { bg: '#ffebee', text: '#c62828' }; // Rojo
+        if (status.includes('cierre') || status.includes('terminado')) return { bg: '#e8f5e9', text: '#2e7d32' }; // Verde
+        return { bg: '#eeeeee', text: '#424242' }; // Gris por defecto
+    };
 
-      {mostrarFormulario && (
-        <NuevaSolicitudForm onSolicitudCreada={() => { setMostrarFormulario(false); cargarDatos(); }} />
-      )}
-      
-      <hr />
-      
-      <h4>Historial de Mis Solicitudes</h4>
-      
-      {solicitudes.length > 0 ? solicitudes.map(s => (
-        <article key={s.id}>
-          <header>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap'}}>
-                <span><strong>ID #{s.id}</strong> | Vehículo: <strong>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong></span>
-                <mark>{s.estado}</mark>
-            </div>
-          </header>
-          
-          {/* --- SECCIÓN DE TRAZABILIDAD DETALLADA --- */}
-          <details>
-            <summary>Ver Trazabilidad Completa del Proceso</summary>
-            <div style={{paddingLeft: '1rem', borderLeft: '3px solid var(--pico-primary)', marginTop: '1rem', fontSize: '0.9rem'}}>
+    return (
+        <main style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '15px', backgroundColor: '#f4f7f6', minHeight: '100vh', boxSizing: 'border-box' }}>
+            
+            {/* --- CABECERA RESPONSIVA --- */}
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+                <div>
+                    <h2 style={{ margin: 0, fontSize: '1.3rem', color: '#333' }}>
+                        Bienvenido, {usuario.nombre_completo || usuario.nombre || 'Conductor'}
+                    </h2>
+                    <span style={{ fontSize: '0.85rem', color: '#666' }}>Panel de Conductor | Sede: {usuario.nombre_sede || 'General'}</span>
+                </div>
+                <button 
+                    onClick={handleLogout} 
+                    style={{ backgroundColor: 'transparent', border: '1px solid #dc3545', color: '#dc3545', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    Salir
+                </button>
+            </header>
+
+            {/* --- BOTÓN GIGANTE DE ACCIÓN (Abre el Modal) --- */}
+            <button 
+                onClick={() => setMostrarFormulario(true)}
+                style={{ 
+                    width: '100%', 
+                    padding: '18px', 
+                    fontSize: '1.1rem', 
+                    fontWeight: 'bold', 
+                    backgroundColor: '#0288d1', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '12px', 
+                    boxShadow: '0 4px 6px rgba(2, 136, 209, 0.3)',
+                    marginBottom: '25px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: '10px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                }}
+            >
+                <span style={{ fontSize: '1.4rem' }}>➕</span> Crear Nueva Solicitud
+            </button>
+
+            {/* --- HISTORIAL DE SOLICITUDES --- */}
+            <div>
+                <h3 style={{ fontSize: '1.1rem', color: '#555', marginBottom: '15px', marginLeft: '5px' }}>Historial de Mis Solicitudes</h3>
                 
-                {/* Paso 1: Creación */}
-                <p><strong>1️⃣ Solicitud Inicial</strong></p>
-                <ul>
-                    <li><strong>Fecha:</strong> {new Date(s.fecha_creacion).toLocaleString('es-CO')}</li>
-                    <li><strong>Necesidad:</strong> {s.necesidad_reportada}</li>
-                </ul>
+                {solicitudes.length > 0 ? solicitudes.map(s => {
+                    const colores = getStatusColor(s.estado);
+                    return (
+                        <div key={s.id} style={{ backgroundColor: 'white', borderRadius: '12px', padding: '15px', marginBottom: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderLeft: `5px solid ${colores.text}` }}>
+                            
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                                <strong style={{ fontSize: '1.1rem', color: '#222' }}>
+                                    {s.nombre_vehiculo || 'Vehículo'} ({s.placa_vehiculo || s.placa || 'Sin Placa'})
+                                </strong>
+                                
+                                <span style={{ 
+                                    backgroundColor: colores.bg, 
+                                    color: colores.text, 
+                                    padding: '6px 12px', 
+                                    borderRadius: '20px', 
+                                    fontSize: '0.75rem', 
+                                    fontWeight: 'bold',
+                                    textAlign: 'center',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    {s.estado}
+                                </span>
+                            </div>
 
-                {/* Paso 2: Diagnóstico (Solo si ya pasó) */}
-                {s.diagnostico_taller && (
-                    <>
-                        <hr style={{margin: '0.5rem 0'}}/>
-                        <p><strong>2️⃣ Diagnóstico Taller</strong></p>
-                        <ul>
-                            <li><strong>Técnico:</strong> {s.nombre_tecnico || 'Taller'}</li>
-                            <li><strong>Fecha Ingreso:</strong> {s.hora_ingreso_taller ? new Date(s.hora_ingreso_taller).toLocaleString('es-CO') : 'N/A'}</li>
-                            <li><strong>Diagnóstico:</strong> {s.diagnostico_taller}</li>
-                        </ul>
-                    </>
-                )}
+                            <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: '#555' }}>
+                                <strong>ID #{s.id}</strong> • {new Date(s.fecha_creacion).toLocaleDateString('es-CO')}
+                            </p>
+                            
+                            <details style={{ outline: 'none' }}>
+                                <summary style={{ cursor: 'pointer', color: '#0288d1', fontSize: '0.9rem', fontWeight: '600', padding: '5px 0' }}>
+                                    Ver Trazabilidad Completa
+                                </summary>
+                                <div style={{ padding: '12px', marginTop: '10px', backgroundColor: '#f9f9f9', borderRadius: '8px', fontSize: '0.85rem', color: '#444' }}>
+                                    <p style={{ margin: '0 0 8px 0' }}><strong>📝 Necesidad:</strong> {s.necesidad_reportada}</p>
+                                    {s.diagnostico_taller && <p style={{ margin: '0 0 8px 0' }}><strong>🔧 Diagnóstico:</strong> {s.diagnostico_taller}</p>}
+                                    {s.trabajos_realizados && <p style={{ margin: '0' }}><strong>✅ Trabajo:</strong> {s.trabajos_realizados}</p>}
+                                </div>
+                            </details>
 
-                {/* Paso 3: Decisión Coordinación (Solo si ya pasó) */}
-                {s.fecha_aprobacion_rechazo && (
-                    <>
-                        <hr style={{margin: '0.5rem 0'}}/>
-                        <p><strong>3️⃣ Decisión Coordinación</strong></p>
-                        <ul>
-                            <li><strong>Coordinador:</strong> {s.nombre_coordinador || 'Coordinación'}</li>
-                            <li><strong>Estado:</strong> {s.motivo_rechazo ? <span style={{color:'red'}}>Rechazado</span> : <span style={{color:'green'}}>Aprobado</span>}</li>
-                            {s.motivo_rechazo && <li><strong style={{color:'red'}}>Motivo Rechazo:</strong> {s.motivo_rechazo}</li>}
-                        </ul>
-                    </>
-                )}
-
-                {/* Paso 4: Reparación (Solo si ya pasó) */}
-                {s.trabajos_realizados && (
-                    <>
-                        <hr style={{margin: '0.5rem 0'}}/>
-                        <p><strong>4️⃣ Reparación Realizada</strong></p>
-                        <ul>
-                            <li><strong>Fecha Salida:</strong> {s.hora_salida_taller ? new Date(s.hora_salida_taller).toLocaleString('es-CO') : 'N/A'}</li>
-                            <li><strong>Trabajos:</strong> {s.trabajos_realizados}</li>
-                            <li><strong>Repuestos:</strong> {s.repuestos_utilizados || 'Ninguno'}</li>
-                        </ul>
-                    </>
-                )}
-
-                {/* Paso 5: Cierre (Solo si ya pasó) */}
-                {s.fecha_cierre_proceso && (
-                    <>
-                        <hr style={{margin: '0.5rem 0'}}/>
-                        <p><strong>5️⃣ Cierre del Proceso</strong></p>
-                        <ul>
-                            <li><strong>Fecha Cierre:</strong> {new Date(s.fecha_cierre_proceso).toLocaleString('es-CO')}</li>
-                            <li><strong>Observación Entrega:</strong> {s.observaciones_entrega_conductor || 'Ninguna'}</li>
-                        </ul>
-                    </>
+                        </div>
+                    )
+                }) : (
+                    <div style={{ textAlign: 'center', padding: '30px', backgroundColor: 'white', borderRadius: '12px', color: '#888' }}>
+                        <p style={{ fontSize: '1.1rem' }}>No tienes solicitudes registradas en este momento.</p>
+                    </div>
                 )}
             </div>
-          </details>
-          {/* ----------------------------------------- */}
 
-          {/* VISUALIZACIÓN RÁPIDA DE RECHAZO (Fuera del desplegable para que sea evidente) */}
-          {s.motivo_rechazo && (
-            <div style={{marginTop: '1rem', padding: '1rem', backgroundColor: '#ffebee', border: '1px solid #ffcdd2', borderRadius: '5px', color: '#b71c1c'}}>
-              <strong>⛔ Solicitud Rechazada:</strong> {s.motivo_rechazo}
-            </div>
-          )}
-          
-          {/* SECCIÓN: Confirmación de Entrega (Solo si está listo) */}
-          {s.estado === 'Listo para Entrega' && (
-            <footer style={{marginTop: '1rem', borderTop: '2px solid var(--pico-primary)', paddingTop: '1rem'}}>
-              <h5>Confirmar Recepción del Vehículo</h5>
-              <p><small>Por favor revise el vehículo y deje sus observaciones antes de firmar.</small></p>
-              
-              <label htmlFor={`obs-${s.id}`}><strong>Sus Observaciones de Recibido:</strong></label>
-              <textarea 
-                id={`obs-${s.id}`}
-                rows="2" 
-                placeholder="Ej: Recibo a satisfacción, luces operativas, vehículo limpio..."
-                value={observacionesInputs[s.id] || ''}
-                onChange={(e) => handleObservacionChange(s.id, e.target.value)}
-                style={{marginBottom: '1rem'}}
-              />
+            {/* --- MODAL FORMULARIO DE NUEVA SOLICITUD (Diseño Móvil) --- */}
+            {mostrarFormulario && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex',
+                    alignItems: 'flex-end', justifyContent: 'center', zIndex: 1000
+                }}>
+                    <div style={{
+                        backgroundColor: 'white', width: '100%', maxWidth: '600px',
+                        borderTopLeftRadius: '25px', borderTopRightRadius: '25px',
+                        padding: '25px', boxSizing: 'border-box',
+                        boxShadow: '0 -4px 15px rgba(0,0,0,0.2)',
+                        animation: 'slideUp 0.3s ease-out'
+                    }}>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.4rem', color: '#333' }}>Nueva Solicitud</h3>
+                            <button 
+                                onClick={() => setMostrarFormulario(false)}
+                                style={{ background: 'none', border: 'none', fontSize: '1.5rem', color: '#888', cursor: 'pointer' }}
+                            >
+                                ✖
+                            </button>
+                        </div>
 
-              <label><strong>Firma Digital:</strong></label>
-              <div style={{border: '1px solid #ccc', borderRadius: '5px', width: 300, height: 150, marginBottom: '1rem', backgroundColor: '#fff'}}>
-                <SignatureCanvas 
-                    ref={ref => { sigCanvases[s.id] = ref; }} 
-                    canvasProps={{width: 300, height: 150, className: 'sigCanvas'}} 
-                />
-              </div>
-              
-              <div role="group">
-                  <button onClick={() => sigCanvases[s.id].clear()} className="secondary outline">Borrar Firma</button>
-                  <button onClick={() => handleSatisfaccion(s.id)}>Confirmar y Enviar</button>
-              </div>
-            </footer>
-          )}
-        </article>
-      )) : (
-        <p>No tienes solicitudes registradas en el historial.</p>
-      )}
-    </main>
-  );
+                        <form onSubmit={handleCrearSolicitud}>
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#444' }}>Vehículo:</label>
+                                <select 
+                                    value={nuevaSolicitud.vehiculo_id}
+                                    onChange={(e) => setNuevaSolicitud({...nuevaSolicitud, vehiculo_id: e.target.value})}
+                                    style={{ width: '100%', padding: '15px', borderRadius: '10px', border: '1px solid #ccc', fontSize: '1rem', backgroundColor: '#f9f9f9' }}
+                                    required
+                                >
+                                    <option value="" disabled>Seleccione el vehículo...</option>
+                                    {vehiculos.map(v => (
+                                        <option key={v.id} value={v.id}>{v.nombre} - {v.placa}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div style={{ marginBottom: '25px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#444' }}>¿Qué sucede? (Necesidad):</label>
+                                <textarea 
+                                    value={nuevaSolicitud.necesidad_reportada}
+                                    onChange={(e) => setNuevaSolicitud({...nuevaSolicitud, necesidad_reportada: e.target.value})}
+                                    placeholder="Ej: Llanta pinchada, ruido en el motor..."
+                                    style={{ width: '100%', padding: '15px', borderRadius: '10px', border: '1px solid #ccc', fontSize: '1rem', minHeight: '120px', backgroundColor: '#f9f9f9', fontFamily: 'inherit' }}
+                                    required
+                                />
+                            </div>
+
+                            <button 
+                                type="submit" 
+                                disabled={cargando}
+                                style={{ 
+                                    width: '100%', padding: '18px', fontSize: '1.1rem', fontWeight: 'bold',
+                                    backgroundColor: cargando ? '#9e9e9e' : '#2e7d32', color: 'white',
+                                    border: 'none', borderRadius: '12px', cursor: cargando ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                {cargando ? 'Enviando...' : 'Enviar Solicitud'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+            
+            {/* Pequeña animación CSS para que el modal suba suavemente como en las apps nativas */}
+            <style>{`
+                @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+            `}</style>
+
+        </main>
+    );
 };
 
 export default ConductorDashboard;

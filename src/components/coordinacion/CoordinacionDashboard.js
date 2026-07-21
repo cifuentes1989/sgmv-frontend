@@ -39,8 +39,14 @@ const CoordinacionDashboard = () => {
     cargarDatos();
   }, []);
 
-  // 4. MANEJADORES (HANDLERS)
+  // --- NUEVO: CERRAR SESIÓN ---
+  const handleLogout = () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/';
+  };
 
+  // 4. MANEJADORES (HANDLERS)
   const handleDecision = async (id, decision) => {
     if (sigCanvases[id].isEmpty()) {
       alert("La firma es obligatoria para aprobar o rechazar.");
@@ -89,7 +95,7 @@ const CoordinacionDashboard = () => {
     }
   };
 
-  // --- 5. GENERADOR DE PDF PROFESIONAL (DISEÑO COMPACTO) ---
+  // --- 5. GENERADOR DE PDF PROFESIONAL (INTACTO) ---
   const generarPDF = (solicitud) => {
     const doc = new jsPDF();
     
@@ -206,147 +212,164 @@ const CoordinacionDashboard = () => {
     doc.save(`reporte_SGMV_${solicitud.id}.pdf`);
   };
 
+  // --- FUNCIÓN DE COLORES DE ESTADO ---
+  const getStatusColor = (estado) => {
+    const status = estado?.toLowerCase() || '';
+    if (status.includes('pendiente')) return { bg: '#fff3e0', text: '#e65100' };
+    if (status.includes('taller') || status.includes('aprobado')) return { bg: '#e3f2fd', text: '#1565c0' };
+    if (status.includes('rechazado')) return { bg: '#ffebee', text: '#c62828' };
+    if (status.includes('cierre') || status.includes('terminado') || status.includes('finalizado')) return { bg: '#e8f5e9', text: '#2e7d32' };
+    return { bg: '#eeeeee', text: '#424242' };
+  };
+
   return (
-    <main className="container">
-      <hgroup>
-        <h3>Bienvenido, {nombreUsuario}</h3>
-        <p>Panel de Coordinación | Sede: <strong>{nombreSede}</strong></p>
-        <p>Gestione aprobaciones, rechazos y cierres finales.</p>
-      </hgroup>
-      {mensaje && <article><p>{mensaje}</p></article>}
+    <main style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '15px', backgroundColor: '#f4f7f6', minHeight: '100vh', boxSizing: 'border-box' }}>
+      
+      {/* --- CABECERA RESPONSIVA --- */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+          <div>
+              <h2 style={{ margin: 0, fontSize: '1.3rem', color: '#333' }}>
+                  Bienvenido, {nombreUsuario}
+              </h2>
+              <span style={{ fontSize: '0.85rem', color: '#666' }}>Coordinación | Sede: {nombreSede}</span>
+          </div>
+          <button 
+              onClick={handleLogout} 
+              style={{ backgroundColor: 'transparent', border: '1px solid #dc3545', color: '#dc3545', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+              Salir
+          </button>
+      </header>
+
+      {mensaje && (
+          <div style={{ backgroundColor: '#e3f2fd', color: '#0d47a1', padding: '10px 15px', borderRadius: '8px', marginBottom: '15px', textAlign: 'center', fontWeight: 'bold' }}>
+              {mensaje}
+          </div>
+      )}
 
       {/* 1. APROBACIONES PENDIENTES */}
-      <details open>
-        <summary>Solicitudes por Aprobar ({porAprobar.length})</summary>
-        {porAprobar.length > 0 ? porAprobar.map(s => (
-          <article key={s.id}>
-            <header><strong>ID #{s.id}</strong> | Vehículo: <strong>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong></header>
-            <div className="grid">
-                <div>
-                    <p><strong>Conductor:</strong> {s.nombre_conductor}</p>
-                    <p><strong>Necesidad:</strong> {s.necesidad_reportada}</p>
+      <details open style={{ marginBottom: '20px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+        <summary style={{ padding: '15px', backgroundColor: '#fff3e0', color: '#e65100', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', outline: 'none' }}>
+            ⚖️ Solicitudes por Aprobar ({porAprobar.length})
+        </summary>
+        <div style={{ padding: '15px' }}>
+            {porAprobar.length > 0 ? porAprobar.map(s => (
+            <div key={s.id} style={{ borderBottom: '1px solid #eee', paddingBottom: '20px', marginBottom: '15px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <strong style={{ fontSize: '1.1rem', color: '#333' }}>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong>
+                    <span style={{ fontSize: '0.8rem', color: '#888' }}>ID #{s.id}</span>
                 </div>
-                <div>
-                    <p style={{ background: '#f0f0f0', padding: '5px' }}><strong>Diagnóstico Taller:</strong> {s.diagnostico_taller}</p>
+                
+                <div style={{ marginBottom: '10px', fontSize: '0.9rem', color: '#555' }}>
+                    <p style={{ margin: '0 0 5px 0' }}><strong>Conductor:</strong> {s.nombre_conductor}</p>
+                    <p style={{ margin: '0' }}><strong>Necesidad Inicial:</strong> {s.necesidad_reportada}</p>
+                </div>
+
+                {/* CUADRO RESALTADO: EL DIAGNÓSTICO DEL TALLER */}
+                <div style={{ backgroundColor: '#e3f2fd', borderLeft: '4px solid #1565c0', padding: '12px', borderRadius: '0 8px 8px 0', fontSize: '0.95rem', marginBottom: '15px' }}>
+                    <p style={{ margin: 0, color: '#0d47a1' }}><strong>🛠️ Diagnóstico Taller:</strong> {s.diagnostico_taller}</p>
+                </div>
+                
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.9rem' }}>Su Firma para Decisión:</label>
+                <div style={{ border: '2px dashed #ccc', borderRadius: '8px', width: '100%', maxWidth: '300px', height: '150px', backgroundColor: 'white', margin: '0 auto 15px auto', display: 'flex', justifyContent: 'center' }}>
+                    <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150, className: 'sigCanvas'}} />
+                </div>
+                
+                {/* BOTONES LADO A LADO PARA CELULAR */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => handleDecision(s.id, 'Rechazado')} style={{ flex: 1, padding: '12px', backgroundColor: 'transparent', color: '#d32f2f', border: '2px solid #d32f2f', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>
+                        ❌ Rechazar
+                    </button>
+                    <button onClick={() => handleDecision(s.id, 'Aprobado')} style={{ flex: 1.5, padding: '12px', backgroundColor: '#2e7d32', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>
+                        ✅ Aprobar
+                    </button>
                 </div>
             </div>
-            
-            <label>Firma de Coordinación:</label>
-            <div style={{border: '1px solid var(--pico-contrast)', borderRadius: 'var(--pico-border-radius)', width: 300, height: 150, backgroundColor: 'white'}}>
-              <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150}} />
-            </div>
-            <footer>
-              <div role="group">
-                  <button onClick={() => handleDecision(s.id, 'Aprobado')}>Aprobar</button>
-                  <button onClick={() => handleDecision(s.id, 'Rechazado')} className="secondary">Rechazar</button>
-              </div>
-            </footer>
-          </article>
-        )) : <p>No hay solicitudes pendientes de aprobación.</p>}
+            )) : <p style={{ color: '#888', textAlign: 'center', padding: '10px' }}>No hay solicitudes pendientes de aprobación.</p>}
+        </div>
       </details>
 
       {/* 2. CIERRES PENDIENTES */}
-      <details open>
-        <summary>Procesos Pendientes de Cierre ({porCerrar.length})</summary>
-        {porCerrar.length > 0 ? porCerrar.map(s => (
-          <article key={s.id}>
-             <header><strong>ID #{s.id}</strong> | Vehículo: <strong>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong></header>
-             <p><strong>Estado:</strong> <mark>{s.estado}</mark></p>
-             <div style={{marginBottom: '1rem'}}>
-                <p><strong>Observación del Conductor al Recibir:</strong></p>
-                <blockquote style={{margin: 0}}>"{s.observaciones_entrega_conductor || "Sin observaciones"}"</blockquote>
-             </div>
-             
-             <label>Firma de Cierre Final:</label>
-             <div style={{border: '1px solid var(--pico-contrast)', borderRadius: 'var(--pico-border-radius)', width: 300, height: 150, backgroundColor: 'white'}}>
-               <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150}} />
-             </div>
-             <footer>
-                <button onClick={() => handleCierre(s.id)}>Firmar y Archivar Caso</button>
-             </footer>
-          </article>
-        )) : <p>No hay procesos pendientes de cierre.</p>}
+      <details open style={{ marginBottom: '20px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+        <summary style={{ padding: '15px', backgroundColor: '#e8f5e9', color: '#2e7d32', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', outline: 'none' }}>
+            🔒 Procesos Pendientes de Cierre ({porCerrar.length})
+        </summary>
+        <div style={{ padding: '15px' }}>
+            {porCerrar.length > 0 ? porCerrar.map(s => (
+            <div key={s.id} style={{ borderBottom: '1px solid #eee', paddingBottom: '20px', marginBottom: '15px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <strong style={{ fontSize: '1.1rem', color: '#333' }}>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong>
+                    <span style={{ fontSize: '0.8rem', color: '#888' }}>ID #{s.id}</span>
+                </div>
+                
+                <div style={{ backgroundColor: '#f5f5f5', padding: '12px', borderRadius: '8px', marginBottom: '15px' }}>
+                    <p style={{ margin: '0 0 5px 0', fontSize: '0.85rem', color: '#555' }}><strong>Feedback del Conductor al Recibir:</strong></p>
+                    <p style={{ margin: 0, fontStyle: 'italic', color: '#333' }}>"{s.observaciones_entrega_conductor || "Sin observaciones"}"</p>
+                </div>
+                
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.9rem' }}>Firma de Cierre Final:</label>
+                <div style={{ border: '2px dashed #ccc', borderRadius: '8px', width: '100%', maxWidth: '300px', height: '150px', backgroundColor: 'white', margin: '0 auto 15px auto', display: 'flex', justifyContent: 'center' }}>
+                    <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150, className: 'sigCanvas'}} />
+                </div>
+                
+                <button onClick={() => handleCierre(s.id)} style={{ width: '100%', padding: '14px', backgroundColor: '#37474f', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                    🗄️ Firmar y Archivar Caso
+                </button>
+            </div>
+            )) : <p style={{ color: '#888', textAlign: 'center', padding: '10px' }}>No hay procesos pendientes de cierre.</p>}
+        </div>
       </details>
 
       {/* 3. HISTORIAL COMPLETO CON TRAZABILIDAD VISUAL */}
-      <details>
-        <summary>Historial Completo de Solicitudes ({historialCompleto.length})</summary>
-        {historialCompleto.length > 0 ? historialCompleto.map(s => (
-          <article key={s.id}>
-            <header>
-              <strong>ID #{s.id}</strong> | Vehículo: <strong>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong> | Estado: <mark>{s.estado}</mark>
-            </header>
-            
-            <details>
-              <summary>Ver Trazabilidad Completa</summary>
-              <div style={{paddingLeft: '1rem', borderLeft: '3px solid var(--pico-primary)', marginTop: '1rem', fontSize: '0.9rem'}}>
-                
-                {/* ETAPA 1 */}
-                <p><strong>1️⃣ Solicitud Inicial</strong></p>
-                <ul>
-                    <li>Conductor: {s.nombre_conductor}</li>
-                    <li>Fecha: {new Date(s.fecha_creacion).toLocaleString('es-CO')}</li>
-                    <li>Reporte: {s.necesidad_reportada}</li>
-                </ul>
-                
-                {/* ETAPA 2 */}
-                {s.diagnostico_taller && (
-                    <>
-                        <hr style={{margin: '0.5rem 0'}}/>
-                        <p><strong>2️⃣ Diagnóstico</strong></p>
-                        <ul>
-                            <li>Técnico: {s.nombre_tecnico}</li>
-                            <li>Diagnóstico: {s.diagnostico_taller}</li>
-                        </ul>
-                    </>
-                )}
+      <details style={{ marginBottom: '20px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+        <summary style={{ padding: '15px', backgroundColor: '#eeeeee', color: '#424242', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', outline: 'none' }}>
+            📚 Historial Completo de Solicitudes ({historialCompleto.length})
+        </summary>
+        <div style={{ padding: '15px' }}>
+            {historialCompleto.length > 0 ? historialCompleto.map(s => {
+                const colores = getStatusColor(s.estado);
+                return (
+                <div key={s.id} style={{ borderBottom: '1px solid #eee', paddingBottom: '20px', marginBottom: '15px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <strong style={{ fontSize: '1rem', color: '#333' }}>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong>
+                        <span style={{ backgroundColor: colores.bg, color: colores.text, padding: '4px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold', textAlign: 'center' }}>
+                            {s.estado}
+                        </span>
+                    </div>
+                    
+                    <details style={{ outline: 'none' }}>
+                        <summary style={{ cursor: 'pointer', color: '#0288d1', fontSize: '0.9rem', fontWeight: 'bold', padding: '5px 0' }}>
+                            Ver Trazabilidad Completa
+                        </summary>
+                        <div style={{ padding: '12px', borderLeft: '3px solid #0288d1', marginTop: '10px', fontSize: '0.85rem', color: '#444', backgroundColor: '#fafafa', borderRadius: '0 8px 8px 0' }}>
+                            
+                            <p style={{ margin: '0 0 5px 0' }}><strong>1️⃣ Solicitud Inicial:</strong> {s.necesidad_reportada}</p>
+                            
+                            {s.diagnostico_taller && (
+                                <p style={{ margin: '5px 0' }}><strong>2️⃣ Diagnóstico Taller:</strong> {s.diagnostico_taller}</p>
+                            )}
 
-                {/* ETAPA 3 */}
-                {s.fecha_aprobacion_rechazo && (
-                    <>
-                        <hr style={{margin: '0.5rem 0'}}/>
-                        <p><strong>3️⃣ Decisión</strong></p>
-                        <ul>
-                            <li>Coordinador: {s.nombre_coordinador}</li>
-                            <li>Estado: {s.motivo_rechazo ? <span style={{color:'red'}}>Rechazado</span> : 'Aprobado'}</li>
-                            {s.motivo_rechazo && <li><strong style={{color:'red'}}>Motivo: {s.motivo_rechazo}</strong></li>}
-                        </ul>
-                    </>
-                )}
+                            {s.fecha_aprobacion_rechazo && (
+                                <p style={{ margin: '5px 0' }}><strong>3️⃣ Decisión:</strong> {s.motivo_rechazo ? <span style={{color:'#d32f2f'}}>Rechazado ({s.motivo_rechazo})</span> : <span style={{color:'#2e7d32'}}>Aprobado</span>}</p>
+                            )}
 
-                {/* ETAPA 4 */}
-                {s.trabajos_realizados && (
-                    <>
-                        <hr style={{margin: '0.5rem 0'}}/>
-                        <p><strong>4️⃣ Reparación</strong></p>
-                        <ul>
-                            <li>Trabajos: {s.trabajos_realizados}</li>
-                            <li>Repuestos: {s.repuestos_utilizados}</li>
-                        </ul>
-                    </>
-                )}
+                            {s.trabajos_realizados && (
+                                <p style={{ margin: '5px 0' }}><strong>4️⃣ Reparación:</strong> {s.trabajos_realizados} <br/><small>Repuestos: {s.repuestos_utilizados || 'Ninguno'}</small></p>
+                            )}
 
-                {/* ETAPA 5 */}
-                {s.fecha_cierre_proceso && (
-                    <>
-                        <hr style={{margin: '0.5rem 0'}}/>
-                        <p><strong>5️⃣ Cierre</strong></p>
-                        <ul>
-                            <li>Fecha Cierre: {new Date(s.fecha_cierre_proceso).toLocaleString('es-CO')}</li>
-                            <li>Observación Entrega: {s.observaciones_entrega_conductor}</li>
-                        </ul>
-                    </>
-                )}
-              </div>
-            </details>
+                            {s.fecha_cierre_proceso && (
+                                <p style={{ margin: '5px 0 0 0' }}><strong>5️⃣ Cierre Final:</strong> {new Date(s.fecha_cierre_proceso).toLocaleDateString('es-CO')}</p>
+                            )}
+                        </div>
+                    </details>
 
-            {s.estado === 'Proceso Finalizado' && (
-                <footer style={{marginTop: '1rem'}}>
-                    <button onClick={() => generarPDF(s)}>📄 Descargar PDF Oficial</button>
-                </footer>
-            )}
-          </article>
-        )) : <p>No hay solicitudes en el historial de la sede.</p>}
+                    {s.estado === 'Proceso Finalizado' && (
+                        <button onClick={() => generarPDF(s)} style={{ marginTop: '15px', width: '100%', padding: '10px', backgroundColor: '#fff', color: '#0288d1', border: '2px solid #0288d1', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            📄 Descargar PDF Oficial
+                        </button>
+                    )}
+                </div>
+            )}) : <p style={{ color: '#888', textAlign: 'center', padding: '10px' }}>No hay solicitudes en el historial.</p>}
+        </div>
       </details>
     </main>
   );
