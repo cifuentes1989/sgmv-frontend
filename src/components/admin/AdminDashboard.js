@@ -2,50 +2,44 @@ import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { Pie, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
-import EstadoFlota from './EstadoFlota'; // Asegúrate de tener este componente creado
+import jsPDF from 'jspdf';
+import 'jspdf-autotable'; // ⚠️ NECESITAS INSTALAR ESTO: npm install jspdf-autotable
+import EstadoFlota from './EstadoFlota';
 
-// Registrar componentes de gráficos
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
 const AdminDashboard = () => {
-    // Estado de la vista actual
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : { nombre_completo: 'Administrador' };
+
     const [vista, setVista] = useState('dashboard');
-    
-    // Estados de datos
     const [usuarios, setUsuarios] = useState([]);
     const [vehiculos, setVehiculos] = useState([]);
     const [solicitudes, setSolicitudes] = useState([]);
     const [sedes, setSedes] = useState([]);
     
-    // Estados de filtros y formularios
     const [filtroSede, setFiltroSede] = useState('todas');
     const [datosInforme, setDatosInforme] = useState(null);
     const [fechas, setFechas] = useState({ inicio: '', fin: '' });
     
-    // --- NUEVOS ESTADOS PARA BÚSQUEDA ---
     const [busquedaUsuario, setBusquedaUsuario] = useState('');
     const [busquedaVehiculo, setBusquedaVehiculo] = useState('');
+    // NUEVO: Buscador Universal para Solicitudes
+    const [busquedaSolicitud, setBusquedaSolicitud] = useState(''); 
     
     const [nuevoUsuario, setNuevoUsuario] = useState({ nombre_completo: '', email: '', password: '', rol: 'Conductor', sede_id: '' });
     const [nuevoVehiculo, setNuevoVehiculo] = useState({ nombre: '', placa: '', marca: '', modelo: '', sede_id: '' });
 
-    // Efecto para cerrar sesión
     const handleLogout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/';
     };
 
-    // --- CARGA DE DATOS ---
     useEffect(() => {
         const cargarDatos = async () => {
             try {
-                // Cargar sedes si no están (hardcoded inicial o API futura)
-                if (sedes.length === 0) {
-                    setSedes([{id: 1, nombre: 'Florencia'}, {id: 2, nombre: 'Popayán'}]);
-                }
-
-                // Carga dinámica según la vista
+                if (sedes.length === 0) setSedes([{id: 1, nombre: 'Florencia'}, {id: 2, nombre: 'Popayán'}]);
                 if (vista === 'informes' && !datosInforme) {
                     const res = await api.get('/admin/informes/datos');
                     setDatosInforme(res.data);
@@ -56,33 +50,107 @@ const AdminDashboard = () => {
                     const res = await api.get('/vehiculos');
                     setVehiculos(res.data);
                 }
-            } catch (error) { 
-                console.error(`Error cargando datos para ${vista}`, error); 
-            }
+            } catch (error) { console.error(`Error cargando datos para ${vista}`, error); }
         };
-
-        // Si la vista no es de recarga, cargamos datos
-        if (!vista.includes('_reload')) {
-            cargarDatos();
-        }
+        if (!vista.includes('_reload')) cargarDatos();
     }, [vista, datosInforme, sedes.length]);
     
-    // Efecto específico para filtrar solicitudes cuando cambia el select
     useEffect(() => {
         const cargarSolicitudesFiltradas = async () => {
             if (vista === 'solicitudes') {
                 try {
                     const res = await api.get(`/admin/solicitudes/todas?sede_id=${filtroSede}`);
                     setSolicitudes(res.data);
-                } catch (error) { 
-                    console.error("Error al filtrar solicitudes", error); 
-                }
+                } catch (error) { console.error("Error al filtrar solicitudes", error); }
             }
         };
         cargarSolicitudesFiltradas();
     }, [vista, filtroSede]);
 
-    // --- MANEJADORES DE ACCIONES (HANDLERS) ---
+    // --- NUEVO: FILTRO INTELIGENTE DE SOLICITUDES ---
+    const solicitudesFiltradas = solicitudes.filter(s => {
+        const termino = busquedaSolicitud.toLowerCase();
+        return (
+            s.placa_vehiculo?.toLowerCase().includes(termino) ||
+            s.id?.toString().includes(termino) ||
+            s.estado?.toLowerCase().includes(termino) ||
+            s.nombre_conductor?.toLowerCase().includes(termino) ||
+            s.necesidad_reportada?.toLowerCase().includes(termino)
+        );
+    });
+
+    // --- NUEVO: EXPORTAR A EXCEL (CSV) ---
+    const exportarAExcel = () => {
+        if (solicitudesFiltradas.length === 0) return alert("No hay datos para exportar.");
+        
+        let csvContent = "data:text/csv;charset=utf-8,";
+        // Encabezados
+        csvContent += "ID,Placa,Conductor,Sede,Estado,Fecha Solicitud,Falla Reportada,Tecnico,Diagnostico,Trabajo Realizado,Fecha Cierre\n";
+        
+        // Datos
+        solicitudesFiltradas.forEach(s => {
+            const row = [
+                s.id,
+                s.placa_vehiculo,
+                `"${s.nombre_conductor || ''}"`,
+                s.nombre_sede,
+                s.estado,
+                s.fecha_creacion ? new Date(s.fecha_creacion).toLocaleDateString() : '',
+                `"${(s.necesidad_reportada || '').replace(/"/g, '""')}"`,
+                `"${s.nombre_tecnico || ''}"`,
+                `"${(s.diagnostico_taller || '').replace(/"/g, '""')}"`,
+                `"${(s.trabajos_realizados || '').replace(/"/g, '""')}"`,
+                s.fecha_cierre_proceso ? new Date(s.fecha_cierre_proceso).toLocaleDateString() : ''
+            ].join(",");
+            csvContent += row + "\n";
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Reporte_SGMV_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    // --- NUEVO: EXPORTAR A PDF (TABULAR) ---
+    const exportarAPDF = () => {
+        if (solicitudesFiltradas.length === 0) return alert("No hay datos para exportar.");
+        const doc = new jsPDF('landscape'); // Formato horizontal
+        
+        doc.setFontSize(16);
+        doc.text('Reporte General de Solicitudes SGMV', 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Fecha de generación: ${new Date().toLocaleDateString()}`, 14, 22);
+
+        const tableColumn = ["ID", "Placa", "Sede", "Conductor", "Estado", "Falla Reportada", "Fecha Solicitud"];
+        const tableRows = [];
+
+        solicitudesFiltradas.forEach(s => {
+            const rowData = [
+                s.id,
+                s.placa_vehiculo,
+                s.nombre_sede || 'General',
+                s.nombre_conductor,
+                s.estado,
+                s.necesidad_reportada.length > 30 ? s.necesidad_reportada.substring(0, 30) + '...' : s.necesidad_reportada,
+                new Date(s.fecha_creacion).toLocaleDateString()
+            ];
+            tableRows.push(rowData);
+        });
+
+        // Requiere importar jspdf-autotable arriba
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 30,
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [44, 62, 80] }
+        });
+
+        doc.save(`Reporte_Solicitudes_${new Date().toISOString().split('T')[0]}.pdf`);
+    };
 
     const handleCrearUsuario = async (e) => {
         e.preventDefault();
@@ -91,11 +159,7 @@ const AdminDashboard = () => {
             await api.post('/admin/usuarios', nuevoUsuario);
             alert('Usuario creado con éxito');
             setNuevoUsuario({ nombre_completo: '', email: '', password: '', rol: 'Conductor', sede_id: '' });
-            
-            // RECARGA AUTOMÁTICA
-            const res = await api.get('/admin/usuarios');
-            setUsuarios(res.data);
-            
+            const res = await api.get('/admin/usuarios'); setUsuarios(res.data);
         } catch (error) { alert(`Error: ${error.response?.data?.msg || error.message || 'Error desconocido'}`); }
     };
 
@@ -106,24 +170,15 @@ const AdminDashboard = () => {
             await api.post('/vehiculos', nuevoVehiculo);
             alert('Vehículo creado con éxito');
             setNuevoVehiculo({ nombre: '', placa: '', marca: '', modelo: '', sede_id: '' });
-            
-            // RECARGA AUTOMÁTICA
-            const res = await api.get('/vehiculos');
-            setVehiculos(res.data);
-
+            const res = await api.get('/vehiculos'); setVehiculos(res.data);
         } catch (error) { alert(`Error: ${error.response?.data?.msg || error.message || 'Error desconocido'}`); }
     };
 
     const handleCambiarSedeVehiculo = async (vehiculoId, nuevaSedeId) => {
         try {
             await api.put(`/vehiculos/${vehiculoId}/sede`, { sede_id: nuevaSedeId });
-            const res = await api.get('/vehiculos'); 
-            setVehiculos(res.data);
-            alert('Sede actualizada correctamente');
-        } catch (error) {
-            console.error(error);
-            alert('Error al cambiar la sede del vehículo');
-        }
+            const res = await api.get('/vehiculos'); setVehiculos(res.data); alert('Sede actualizada correctamente');
+        } catch (error) { alert('Error al cambiar la sede del vehículo'); }
     };
 
     const generarInforme = async () => {
@@ -131,13 +186,9 @@ const AdminDashboard = () => {
         try {
             const res = await api.get(`/admin/informes/datos?fecha_inicio=${fechas.inicio}&fecha_fin=${fechas.fin}&sede_id=${filtroSede}`);
             setDatosInforme(res.data);
-        } catch (error) {
-            console.error("Error al generar el informe", error);
-            alert("No se pudo generar el informe.");
-        }
+        } catch (error) { alert("No se pudo generar el informe."); }
     };
 
-    // --- LÓGICA DE BÚSQUEDA EN TIEMPO REAL ---
     const usuariosFiltrados = usuarios.filter(u => 
         u.nombre_completo?.toLowerCase().includes(busquedaUsuario.toLowerCase()) ||
         u.email?.toLowerCase().includes(busquedaUsuario.toLowerCase()) ||
@@ -149,76 +200,79 @@ const AdminDashboard = () => {
         v.placa?.toLowerCase().includes(busquedaVehiculo.toLowerCase())
     );
 
-    // Datos para los gráficos
+    const getStatusColor = (estado) => {
+        const status = estado?.toLowerCase() || '';
+        if (status.includes('pendiente') || status.includes('creada')) return { bg: '#fff3e0', text: '#e65100' };
+        if (status.includes('taller') || status.includes('aprobado') || status.includes('reparacion')) return { bg: '#e3f2fd', text: '#1565c0' };
+        if (status.includes('rechazado')) return { bg: '#ffebee', text: '#c62828' };
+        if (status.includes('cierre') || status.includes('terminado') || status.includes('listo') || status.includes('finalizado')) return { bg: '#e8f5e9', text: '#2e7d32' };
+        return { bg: '#eeeeee', text: '#424242' };
+    };
+
     const chartDataEstado = {
         labels: datosInforme?.porEstado.map(d => d.estado) || [],
-        datasets: [{
-            label: 'Número de Solicitudes',
-            data: datosInforme?.porEstado.map(d => d.cantidad) || [],
-            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'],
-        }]
+        datasets: [{ label: 'Número de Solicitudes', data: datosInforme?.porEstado.map(d => d.cantidad) || [], backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'] }]
     };
     const chartDataVehiculo = {
         labels: datosInforme?.porVehiculo.map(d => d.placa) || [],
-        datasets: [{
-            label: 'Mantenimientos',
-            data: datosInforme?.porVehiculo.map(d => d.cantidad) || [],
-            backgroundColor: 'rgba(54, 162, 235, 0.6)',
-        }]
+        datasets: [{ label: 'Mantenimientos', data: datosInforme?.porVehiculo.map(d => d.cantidad) || [], backgroundColor: 'rgba(54, 162, 235, 0.6)' }]
     };
 
     return (
-        <main className="container">
-            {/* --- NAVEGACIÓN SUPERIOR --- */}
-            <nav style={{marginBottom: '2rem'}}>
-                <ul>
-                    <li><strong>Panel de Administración</strong></li>
-                </ul>
-                <ul>
-                    <li><button onClick={handleLogout} className="outline secondary">Cerrar Sesión</button></li>
-                </ul>
+        <main style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '15px', backgroundColor: '#f4f7f6', minHeight: '100vh', boxSizing: 'border-box' }}>
+            
+            {/* CABECERA ADMIN UNIFICADA */}
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+                <div>
+                    <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#333' }}>Panel de Administración</h2>
+                    <span style={{ fontSize: '0.85rem', color: '#666' }}>Bienvenido, {user.nombre_completo || 'Admin'}</span>
+                </div>
+                <button onClick={handleLogout} style={{ backgroundColor: 'transparent', border: '1px solid #dc3545', color: '#dc3545', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Salir</button>
+            </header>
+
+            {/* NAVEGACIÓN TABS */}
+            <nav style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '20px' }}>
+                <button onClick={() => setVista('dashboard')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'dashboard' ? '#0288d1' : '#e0e0e0', color: vista === 'dashboard' ? 'white' : '#333', whiteSpace: 'nowrap' }}>📊 Estado Flota</button>
+                <button onClick={() => setVista('informes')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'informes' ? '#0288d1' : '#e0e0e0', color: vista === 'informes' ? 'white' : '#333', whiteSpace: 'nowrap' }}>Informes</button>
+                <button onClick={() => setVista('usuarios')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'usuarios' ? '#0288d1' : '#e0e0e0', color: vista === 'usuarios' ? 'white' : '#333', whiteSpace: 'nowrap' }}>Usuarios</button>
+                <button onClick={() => setVista('vehiculos')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'vehiculos' ? '#0288d1' : '#e0e0e0', color: vista === 'vehiculos' ? 'white' : '#333', whiteSpace: 'nowrap' }}>Vehículos</button>
+                <button onClick={() => setVista('solicitudes')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'solicitudes' ? '#0288d1' : '#e0e0e0', color: vista === 'solicitudes' ? 'white' : '#333', whiteSpace: 'nowrap' }}>📋 Solicitudes (Exportar)</button>
             </nav>
 
-            <nav>
-                <ul>
-                    <li><a href="#dashboard" role="button" className={vista === 'dashboard' ? '' : 'outline contrast'} onClick={(e) => {e.preventDefault(); setVista('dashboard')}}>📊 Estado Flota</a></li>
-                    <li><a href="#informes" role="button" className={vista === 'informes' ? '' : 'outline contrast'} onClick={(e) => {e.preventDefault(); setVista('informes')}}>Informes</a></li>
-                    <li><a href="#usuarios" role="button" className={vista === 'usuarios' ? '' : 'outline contrast'} onClick={(e) => {e.preventDefault(); setVista('usuarios')}}>Usuarios</a></li>
-                    <li><a href="#vehiculos" role="button" className={vista === 'vehiculos' ? '' : 'outline contrast'} onClick={(e) => {e.preventDefault(); setVista('vehiculos')}}>Vehículos</a></li>
-                    <li><a href="#solicitudes" role="button" className={vista === 'solicitudes' ? '' : 'outline contrast'} onClick={(e) => {e.preventDefault(); setVista('solicitudes')}}>Solicitudes</a></li>
-                </ul>
-            </nav>
-
-            <hr />
-
-            {/* --- VISTA 1: DASHBOARD (ESTADO FLOTA) --- */}
-            {vista === 'dashboard' && (
-                <EstadoFlota />
-            )}
+            {/* --- VISTA 1: DASHBOARD --- */}
+            {vista === 'dashboard' && <EstadoFlota />}
 
             {/* --- VISTA 2: INFORMES --- */}
             {vista === 'informes' && (
-                <article>
-                    <header>Generar Informes</header>
-                    <div className="grid">
-                        <label>Desde: <input type="date" value={fechas.inicio} onChange={e => setFechas({...fechas, inicio: e.target.value})} /></label>
-                        <label>Hasta: <input type="date" value={fechas.fin} onChange={e => setFechas({...fechas, fin: e.target.value})} /></label>
+                <article style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <h3 style={{ marginTop: 0 }}>Generar Informes Estadísticos</h3>
+                    <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                        <div style={{ flex: 1, minWidth: '200px' }}>
+                            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Desde:</label>
+                            <input type="date" value={fechas.inicio} onChange={e => setFechas({...fechas, inicio: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                        </div>
+                        <div style={{ flex: 1, minWidth: '200px' }}>
+                            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Hasta:</label>
+                            <input type="date" value={fechas.fin} onChange={e => setFechas({...fechas, fin: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                        </div>
+                        <div style={{ flex: 1, minWidth: '200px' }}>
+                            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Filtrar por Sede:</label>
+                            <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
+                                <option value="todas">Todas las Sedes</option>
+                                {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                            </select>
+                        </div>
                     </div>
-                    <label>Filtrar por Sede:</label>
-                    <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)}>
-                        <option value="todas">Todas las Sedes</option>
-                        {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                    </select>
-                    <button onClick={generarInforme} style={{marginTop: '1rem'}}>Actualizar Gráficos</button>
+                    <button onClick={generarInforme} style={{ padding: '12px 24px', backgroundColor: '#2e7d32', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Actualizar Gráficos</button>
                     
                     {datosInforme && (
-                        <div className="grid" style={{marginTop: '2rem'}}>
-                            <div style={{maxWidth: '400px', margin: 'auto'}}>
-                                <h5>Por Estado</h5>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginTop: '30px' }}>
+                            <div style={{ flex: 1, minWidth: '300px', backgroundColor: '#f9f9f9', padding: '20px', borderRadius: '12px' }}>
+                                <h5>Estado de Solicitudes</h5>
                                 <Pie data={chartDataEstado} />
                             </div>
-                            <div>
-                                <h5>Por Vehículo</h5>
+                            <div style={{ flex: 2, minWidth: '400px', backgroundColor: '#f9f9f9', padding: '20px', borderRadius: '12px' }}>
+                                <h5>Mantenimientos por Vehículo</h5>
                                 <Bar data={chartDataVehiculo} />
                             </div>
                         </div>
@@ -228,207 +282,216 @@ const AdminDashboard = () => {
 
             {/* --- VISTA 3: USUARIOS --- */}
             {vista === 'usuarios' && (
-                <article>
-                    <header>Gestión de Usuarios</header>
-                    <form onSubmit={handleCrearUsuario}>
-                        <div className="grid">
-                            <input type="text" placeholder="Nombre completo" value={nuevoUsuario.nombre_completo} onChange={e => setNuevoUsuario({...nuevoUsuario, nombre_completo: e.target.value})} required/>
-                            <input type="email" placeholder="Email" value={nuevoUsuario.email} onChange={e => setNuevoUsuario({...nuevoUsuario, email: e.target.value})} required/>
+                <article style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <h3 style={{ marginTop: 0 }}>Gestión de Usuarios</h3>
+                    <form onSubmit={handleCrearUsuario} style={{ backgroundColor: '#f9f9f9', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+                        <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '15px' }}>
+                            <input type="text" placeholder="Nombre completo" value={nuevoUsuario.nombre_completo} onChange={e => setNuevoUsuario({...nuevoUsuario, nombre_completo: e.target.value})} required style={{ flex: 1, minWidth: '200px', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}/>
+                            <input type="email" placeholder="Email" value={nuevoUsuario.email} onChange={e => setNuevoUsuario({...nuevoUsuario, email: e.target.value})} required style={{ flex: 1, minWidth: '200px', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}/>
                         </div>
-                        <div className="grid">
-                            <input type="password" placeholder="Contraseña" value={nuevoUsuario.password} onChange={e => setNuevoUsuario({...nuevoUsuario, password: e.target.value})} required/>
-                            <select value={nuevoUsuario.rol} onChange={e => setNuevoUsuario({...nuevoUsuario, rol: e.target.value})} required>
+                        <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '15px' }}>
+                            <input type="password" placeholder="Contraseña" value={nuevoUsuario.password} onChange={e => setNuevoUsuario({...nuevoUsuario, password: e.target.value})} required style={{ flex: 1, minWidth: '200px', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}/>
+                            <select value={nuevoUsuario.rol} onChange={e => setNuevoUsuario({...nuevoUsuario, rol: e.target.value})} required style={{ flex: 1, minWidth: '200px', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}>
                                 <option value="Conductor">Conductor</option>
                                 <option value="Taller">Taller</option>
                                 <option value="Coordinacion">Coordinacion</option>
                                 <option value="Admin">Admin</option>
                             </select>
                         </div>
-                        <label>Sede:</label>
-                        <select value={nuevoUsuario.sede_id} onChange={e => setNuevoUsuario({...nuevoUsuario, sede_id: e.target.value})} required>
+                        <select value={nuevoUsuario.sede_id} onChange={e => setNuevoUsuario({...nuevoUsuario, sede_id: e.target.value})} required style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '15px', boxSizing: 'border-box' }}>
                             <option value="">-- Selecciona una Sede --</option>
                             {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                         </select>
-                        <button type="submit" style={{marginTop: '1rem'}}>Crear Usuario</button>
+                        <button type="submit" style={{ padding: '12px 24px', backgroundColor: '#0288d1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Crear Usuario</button>
                     </form>
-                    <hr/>
                     
-                    {/* BUSCADOR DE USUARIOS */}
-                    <div style={{ marginBottom: '1rem' }}>
-                        <input 
-                            type="search" 
-                            placeholder="🔍 Buscar por nombre, email o rol..." 
-                            value={busquedaUsuario}
-                            onChange={(e) => setBusquedaUsuario(e.target.value)}
-                        />
-                    </div>
+                    <input type="search" placeholder="🔍 Buscar usuario..." value={busquedaUsuario} onChange={(e) => setBusquedaUsuario(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '15px', boxSizing: 'border-box' }} />
 
-                    <figure>
-                        <table>
-                           <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Sede</th></tr></thead>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#eeeeee' }}>
+                                    <th style={{ padding: '12px', borderBottom: '2px solid #ccc' }}>Nombre</th>
+                                    <th style={{ padding: '12px', borderBottom: '2px solid #ccc' }}>Email</th>
+                                    <th style={{ padding: '12px', borderBottom: '2px solid #ccc' }}>Rol</th>
+                                    <th style={{ padding: '12px', borderBottom: '2px solid #ccc' }}>Sede</th>
+                                </tr>
+                            </thead>
                             <tbody>
-                                {usuariosFiltrados.length > 0 ? (
-                                    usuariosFiltrados.map(u => (
-                                        <tr key={u.id}>
-                                            <td>{u.nombre_completo}</td>
-                                            <td>{u.email}</td>
-                                            <td>{u.rol}</td>
-                                            <td>{u.nombre_sede || 'N/A'}</td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr><td colSpan="4" style={{textAlign: 'center'}}>No se encontraron usuarios.</td></tr>
-                                )}
+                                {usuariosFiltrados.length > 0 ? usuariosFiltrados.map(u => (
+                                    <tr key={u.id} style={{ borderBottom: '1px solid #eee' }}>
+                                        <td style={{ padding: '12px' }}>{u.nombre_completo}</td>
+                                        <td style={{ padding: '12px' }}>{u.email}</td>
+                                        <td style={{ padding: '12px' }}>{u.rol}</td>
+                                        <td style={{ padding: '12px' }}>{u.nombre_sede || 'N/A'}</td>
+                                    </tr>
+                                )) : <tr><td colSpan="4" style={{textAlign: 'center', padding: '15px'}}>No se encontraron usuarios.</td></tr>}
                             </tbody>
                         </table>
-                    </figure>
+                    </div>
                 </article>
             )}
             
             {/* --- VISTA 4: VEHÍCULOS --- */}
             {vista === 'vehiculos' && (
-                <article>
-                    <header>Gestión de Vehículos</header>
-                    <form onSubmit={handleCrearVehiculo}>
-                         <div className="grid">
-                           <input type="text" placeholder="Nombre (ej: Ambulancia 02)" value={nuevoVehiculo.nombre} onChange={e => setNuevoVehiculo({...nuevoVehiculo, nombre: e.target.value})} required/>
-                           <input type="text" placeholder="Placa" value={nuevoVehiculo.placa} onChange={e => setNuevoVehiculo({...nuevoVehiculo, placa: e.target.value})} required/>
+                <article style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <h3 style={{ marginTop: 0 }}>Gestión de Vehículos</h3>
+                    <form onSubmit={handleCrearVehiculo} style={{ backgroundColor: '#f9f9f9', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+                         <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '15px' }}>
+                           <input type="text" placeholder="Nombre (ej: Ambulancia 02)" value={nuevoVehiculo.nombre} onChange={e => setNuevoVehiculo({...nuevoVehiculo, nombre: e.target.value})} required style={{ flex: 1, minWidth: '200px', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}/>
+                           <input type="text" placeholder="Placa" value={nuevoVehiculo.placa} onChange={e => setNuevoVehiculo({...nuevoVehiculo, placa: e.target.value})} required style={{ flex: 1, minWidth: '200px', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' }}/>
                          </div>
-                         <label>Sede:</label>
-                         <select value={nuevoVehiculo.sede_id} onChange={e => setNuevoVehiculo({...nuevoVehiculo, sede_id: e.target.value})} required>
+                         <select value={nuevoVehiculo.sede_id} onChange={e => setNuevoVehiculo({...nuevoVehiculo, sede_id: e.target.value})} required style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '15px', boxSizing: 'border-box' }}>
                            <option value="">-- Selecciona una Sede --</option>
                            {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                          </select>
-                         <button type="submit" style={{marginTop: '1rem'}}>Crear Vehículo</button>
+                         <button type="submit" style={{ padding: '12px 24px', backgroundColor: '#0288d1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Crear Vehículo</button>
                     </form>
-                    <hr/>
 
-                    {/* BUSCADOR DE VEHÍCULOS */}
-                    <div style={{ marginBottom: '1rem' }}>
-                        <input 
-                            type="search" 
-                            placeholder="🔍 Buscar por nombre o placa..." 
-                            value={busquedaVehiculo}
-                            onChange={(e) => setBusquedaVehiculo(e.target.value)}
-                        />
-                    </div>
+                    <input type="search" placeholder="🔍 Buscar placa o vehículo..." value={busquedaVehiculo} onChange={(e) => setBusquedaVehiculo(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '15px', boxSizing: 'border-box' }}/>
 
-                    <figure>
-                        <table>
-                            <thead><tr><th>Nombre</th><th>Placa</th><th>Sede</th></tr></thead>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#eeeeee' }}>
+                                    <th style={{ padding: '12px', borderBottom: '2px solid #ccc' }}>Vehículo</th>
+                                    <th style={{ padding: '12px', borderBottom: '2px solid #ccc' }}>Placa</th>
+                                    <th style={{ padding: '12px', borderBottom: '2px solid #ccc' }}>Sede Actual</th>
+                                </tr>
+                            </thead>
                             <tbody>
-                                {vehiculosFiltrados.length > 0 ? (
-                                    vehiculosFiltrados.map(v => (
-                                        <tr key={v.id}>
-                                            <td>{v.nombre}</td>
-                                            <td>{v.placa}</td>
-                                            <td>
-                                                <select 
-                                                    value={v.sede_id || ''} 
-                                                    onChange={(e) => handleCambiarSedeVehiculo(v.id, e.target.value)}
-                                                    style={{ padding: '5px', borderRadius: '4px', margin: 0, width: 'auto' }}
-                                                >
-                                                    <option value="" disabled>Seleccionar...</option>
-                                                    {sedes.map(sede => (
-                                                        <option key={sede.id} value={sede.id}>
-                                                            {sede.nombre}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr><td colSpan="3" style={{textAlign: 'center'}}>No se encontraron vehículos.</td></tr>
-                                )}
+                                {vehiculosFiltrados.length > 0 ? vehiculosFiltrados.map(v => (
+                                    <tr key={v.id} style={{ borderBottom: '1px solid #eee' }}>
+                                        <td style={{ padding: '12px' }}>{v.nombre}</td>
+                                        <td style={{ padding: '12px' }}><strong>{v.placa}</strong></td>
+                                        <td style={{ padding: '12px' }}>
+                                            <select value={v.sede_id || ''} onChange={(e) => handleCambiarSedeVehiculo(v.id, e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ccc', width: '100%' }}>
+                                                <option value="" disabled>Seleccionar...</option>
+                                                {sedes.map(sede => ( <option key={sede.id} value={sede.id}>{sede.nombre}</option> ))}
+                                            </select>
+                                        </td>
+                                    </tr>
+                                )) : <tr><td colSpan="3" style={{textAlign: 'center', padding: '15px'}}>No se encontraron vehículos.</td></tr>}
                             </tbody>
                         </table>
-                    </figure>
+                    </div>
                 </article>
             )}
 
-            {/* --- VISTA 5: SOLICITUDES (TRAZABILIDAD COMPLETA) --- */}
+            {/* --- VISTA 5: SOLICITUDES Y AUDITORÍA --- */}
             {vista === 'solicitudes' && (
-                <article>
-                    <header>
-                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                            <span>Historial Global de Solicitudes</span>
-                            <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)} style={{maxWidth: '200px'}}>
-                                <option value="todas">Ver Todas las Sedes</option>
+                <article style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', marginBottom: '20px', gap: '15px' }}>
+                        <h3 style={{ margin: 0 }}>Auditoría de Solicitudes</h3>
+                        
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button onClick={exportarAExcel} style={{ padding: '10px 15px', backgroundColor: '#1d6f42', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                📊 Exportar Excel
+                            </button>
+                            <button onClick={exportarAPDF} style={{ padding: '10px 15px', backgroundColor: '#d32f2f', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                📄 Exportar PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '20px', backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px' }}>
+                        <div style={{ flex: 1, minWidth: '250px' }}>
+                            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px', fontSize: '0.9rem' }}>🔍 Buscador Universal:</label>
+                            <input 
+                                type="search" 
+                                placeholder="Placa, Conductor, Estado o Falla..." 
+                                value={busquedaSolicitud} 
+                                onChange={e => setBusquedaSolicitud(e.target.value)} 
+                                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+                            />
+                        </div>
+                        <div style={{ flex: 1, minWidth: '200px' }}>
+                            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px', fontSize: '0.9rem' }}>🏢 Filtrar por Sede:</label>
+                            <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
+                                <option value="todas">Todas las Sedes</option>
                                 {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                             </select>
                         </div>
-                    </header>
+                    </div>
                     
-                    {solicitudes.length > 0 ? solicitudes.map(s => (
-                        <details key={s.id} style={{marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '1rem'}}>
-                            <summary>
-                                <strong>ID #{s.id}</strong> | {s.nombre_vehiculo} ({s.placa_vehiculo}) | Estado: <mark>{s.estado}</mark>
-                            </summary>
-                            
-                            <div style={{paddingLeft: '1rem', borderLeft: '3px solid var(--pico-primary)', marginTop: '1rem', fontSize: '0.9rem'}}>
-                                <p><strong>📍 Sede:</strong> {s.nombre_sede}</p>
+                    <div>
+                        {solicitudesFiltradas.length > 0 ? solicitudesFiltradas.map(s => {
+                            const colores = getStatusColor(s.estado);
+                            return(
+                            <details key={s.id} style={{ backgroundColor: 'white', border: '1px solid #eee', borderRadius: '8px', marginBottom: '10px', overflow: 'hidden' }}>
+                                <summary style={{ padding: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fafafa', borderBottom: '1px solid #eee', outline: 'none' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <strong style={{ fontSize: '1.1rem' }}>{s.placa_vehiculo} <span style={{ color: '#888', fontSize: '0.85rem' }}>| ID #{s.id}</span></strong>
+                                        <span style={{ fontSize: '0.85rem', color: '#555' }}>Sede: {s.nombre_sede || 'General'}</span>
+                                    </div>
+                                    <span style={{ backgroundColor: colores.bg, color: colores.text, padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                                        {s.estado}
+                                    </span>
+                                </summary>
                                 
-                                {/* Etapa 1: Solicitud */}
-                                <div style={{marginBottom: '1rem'}}>
-                                    <strong>1️⃣ Solicitud Inicial</strong>
-                                    <ul style={{margin: 0}}>
-                                        <li><strong>Conductor:</strong> {s.nombre_conductor}</li>
-                                        <li><strong>Fecha:</strong> {new Date(s.fecha_creacion).toLocaleString('es-CO')}</li>
-                                        <li><strong>Necesidad:</strong> {s.necesidad_reportada}</li>
-                                    </ul>
+                                {/* LÍNEA DE TIEMPO CORPORATIVA PARA EL ADMIN */}
+                                <div style={{ padding: '20px', backgroundColor: 'white' }}>
+                                    <div style={{ borderLeft: '3px solid #e0e0e0', paddingLeft: '20px', marginLeft: '10px' }}>
+                                        
+                                        {/* CREACIÓN */}
+                                        <div style={{ position: 'relative', marginBottom: '20px' }}>
+                                            <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#0288d1', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
+                                            <p style={{ margin: 0, color: '#0288d1', fontSize: '1rem' }}><strong>1. Solicitud Inicial</strong></p>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {new Date(s.fecha_creacion).toLocaleString('es-CO')}</p>
+                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}><strong>Conductor:</strong> {s.nombre_conductor}</p>
+                                            <p style={{ margin: '2px 0 0 0', fontSize: '0.9rem' }}><strong>Falla Reportada:</strong> {s.necesidad_reportada}</p>
+                                        </div>
+
+                                        {/* DIAGNÓSTICO */}
+                                        {s.diagnostico_taller && (
+                                        <div style={{ position: 'relative', marginBottom: '20px' }}>
+                                            <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#f57c00', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
+                                            <p style={{ margin: 0, color: '#f57c00', fontSize: '1rem' }}><strong>2. Diagnóstico Taller</strong></p>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {s.hora_ingreso_taller ? new Date(s.hora_ingreso_taller).toLocaleString('es-CO') : 'Sin fecha'}</p>
+                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}><strong>Técnico:</strong> {s.nombre_tecnico}</p>
+                                            <p style={{ margin: '2px 0 0 0', fontSize: '0.9rem' }}><strong>Diagnóstico:</strong> {s.diagnostico_taller}</p>
+                                        </div>
+                                        )}
+
+                                        {/* DECISIÓN */}
+                                        {s.fecha_aprobacion_rechazo && (
+                                        <div style={{ position: 'relative', marginBottom: '20px' }}>
+                                            <span style={{ position: 'absolute', left: '-28px', top: '0', color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
+                                            <p style={{ margin: 0, color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1rem' }}><strong>3. Decisión Coordinación</strong></p>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {new Date(s.fecha_aprobacion_rechazo).toLocaleString('es-CO')}</p>
+                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}><strong>Decisión:</strong> {s.motivo_rechazo ? `Rechazado (${s.motivo_rechazo})` : 'Aprobado'}</p>
+                                        </div>
+                                        )}
+
+                                        {/* REPARACIÓN */}
+                                        {s.trabajos_realizados && (
+                                        <div style={{ position: 'relative', marginBottom: '20px' }}>
+                                            <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#1976d2', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
+                                            <p style={{ margin: 0, color: '#1976d2', fontSize: '1rem' }}><strong>4. Reparación Realizada</strong></p>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {s.hora_salida_taller ? new Date(s.hora_salida_taller).toLocaleString('es-CO') : 'Sin fecha'}</p>
+                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}><strong>Trabajo:</strong> {s.trabajos_realizados}</p>
+                                            <p style={{ margin: '2px 0 0 0', fontSize: '0.9rem', color: '#555' }}>Repuestos: {s.repuestos_utilizados || 'Ninguno'}</p>
+                                        </div>
+                                        )}
+
+                                        {/* CIERRE */}
+                                        {s.fecha_cierre_proceso && (
+                                        <div style={{ position: 'relative', marginBottom: '0' }}>
+                                            <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#388e3c', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
+                                            <p style={{ margin: 0, color: '#388e3c', fontSize: '1rem' }}><strong>5. Cierre Final</strong></p>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {new Date(s.fecha_cierre_proceso).toLocaleString('es-CO')}</p>
+                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem', fontStyle: 'italic' }}>Obs. Conductor: "{s.observaciones_entrega_conductor || 'Ninguna'}"</p>
+                                        </div>
+                                        )}
+                                    </div>
                                 </div>
-
-                                {/* Etapa 2: Diagnóstico */}
-                                {s.diagnostico_taller && (
-                                    <div style={{marginBottom: '1rem'}}>
-                                        <strong>2️⃣ Diagnóstico Taller</strong>
-                                        <ul style={{margin: 0}}>
-                                            <li><strong>Técnico:</strong> {s.nombre_tecnico || 'Taller'}</li>
-                                            <li><strong>Fecha Ingreso:</strong> {s.hora_ingreso_taller ? new Date(s.hora_ingreso_taller).toLocaleString('es-CO') : 'N/A'}</li>
-                                            <li><strong>Diagnóstico:</strong> {s.diagnostico_taller}</li>
-                                        </ul>
-                                    </div>
-                                )}
-
-                                {/* Etapa 3: Decisión */}
-                                {s.fecha_aprobacion_rechazo && (
-                                    <div style={{marginBottom: '1rem'}}>
-                                        <strong>3️⃣ Decisión Coordinación</strong>
-                                        <ul style={{margin: 0}}>
-                                            <li><strong>Coordinador:</strong> {s.nombre_coordinador || 'Coordinación'}</li>
-                                            <li><strong>Fecha:</strong> {new Date(s.fecha_aprobacion_rechazo).toLocaleString('es-CO')}</li>
-                                            <li><strong>Decisión:</strong> {s.motivo_rechazo ? <span style={{color:'red'}}>Rechazado</span> : <span style={{color:'green'}}>Aprobado</span>}</li>
-                                            {s.motivo_rechazo && <li><strong style={{color:'red'}}>Motivo:</strong> {s.motivo_rechazo}</li>}
-                                        </ul>
-                                    </div>
-                                )}
-                                
-                                {/* Etapa 4: Reparación */}
-                                {s.trabajos_realizados && (
-                                    <div style={{marginBottom: '1rem'}}>
-                                        <strong>4️⃣ Reparación Realizada</strong>
-                                        <ul style={{margin: 0}}>
-                                            <li><strong>Fecha Salida:</strong> {s.hora_salida_taller ? new Date(s.hora_salida_taller).toLocaleString('es-CO') : 'N/A'}</li>
-                                            <li><strong>Trabajos:</strong> {s.trabajos_realizados}</li>
-                                            <li><strong>Repuestos:</strong> {s.repuestos_utilizados || 'Ninguno'}</li>
-                                        </ul>
-                                    </div>
-                                )}
-
-                                {/* Etapa 5: Cierre */}
-                                {s.fecha_cierre_proceso && (
-                                    <div style={{marginBottom: '1rem'}}>
-                                        <strong>5️⃣ Cierre y Entrega</strong>
-                                        <ul style={{margin: 0}}>
-                                            <li><strong>Fecha Cierre Final:</strong> {new Date(s.fecha_cierre_proceso).toLocaleString('es-CO')}</li>
-                                            <li><strong>Observación Conductor:</strong> {s.observaciones_entrega_conductor || 'Sin observaciones'}</li>
-                                        </ul>
-                                    </div>
-                                )}
+                            </details>
+                        )}) : (
+                            <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#f9f9f9', borderRadius: '12px' }}>
+                                <p style={{ color: '#888', fontSize: '1.1rem', margin: 0 }}>No hay solicitudes que coincidan con la búsqueda.</p>
                             </div>
-                        </details>
-                    )) : <p>No hay solicitudes registradas.</p>}
+                        )}
+                    </div>
                 </article>
             )}
         </main>
