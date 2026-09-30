@@ -3,8 +3,8 @@ import api from '../../api/axios';
 import SignatureCanvas from 'react-signature-canvas';
 
 const TallerDashboard = () => {
-  const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : { nombre_completo: 'Técnico', sede_id: null };
+ // const userStr = localStorage.getItem('user');
+  //const user = userStr ? JSON.parse(userStr) : { nombre_completo: 'Técnico', sede_id: null };
 
   const [pendientes, setPendientes] = useState([]);
   const [enReparacion, setEnReparacion] = useState([]);
