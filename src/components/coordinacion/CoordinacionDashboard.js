@@ -5,9 +5,7 @@ import SignatureCanvas from 'react-signature-canvas';
 
 const CoordinacionDashboard = () => {
   // 1. RECUPERAR DATOS DEL USUARIO (Local Storage)
-  //const userStr = localStorage.getItem('user');
-  //const user = userStr ? JSON.parse(userStr) : { nombre_completo: 'Coordinador', sede_id: null };
-  const nombreUsuario = user.nombre_completo || user.nombre || 'Coordinador';
+    const nombreUsuario = user.nombre_completo || user.nombre || 'Coordinador';
   const nombreSede = user.sede_id === 1 ? 'Florencia' : user.sede_id === 2 ? 'Popayán' : 'General';
 
   // 2. ESTADOS
