@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import SignatureCanvas from 'react-signature-canvas';
 
 const CoordinacionDashboard = () => {
@@ -215,6 +216,105 @@ const CoordinacionDashboard = () => {
     doc.save(`reporte_SGMV_${solicitud.id}.pdf`);
   };
 
+  // --- INICIO NUEVO CÓDIGO: PDF ORDEN MEDIA CARTA ---
+  const generarOrdenAutorizadaPDF = (solicitud) => {
+    const destinoExterno = window.prompt(
+      "¿A qué taller externo se enviará el vehículo? (Ej. CATERPILLAR)\nDeje en blanco si es para el Taller Interno:"
+    );
+    const nombreDestino = destinoExterno && destinoExterno.trim() !== "" ? destinoExterno.toUpperCase() : "TALLER INTERNO";
+
+    // Usamos tamaño Carta estándar ('letter') para evitar que la impresora lo estire
+    const doc = new jsPDF({ format: 'letter' });
+
+    // --- ENCABEZADO CORPORATIVO ---
+     doc.addImage('/logo.png', 'PNG', 14, 10, 40, 20); // Quita las '//' cuando tengas tu logo en la carpeta public
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('IPS MUTUAL SAS', 196, 14, { align: 'right' });
+    
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text('NIT: 901274906', 196, 19, { align: 'right' });
+    doc.text('Dir: Calle 21N # 8-48 Ciudad Jardín', 196, 24, { align: 'right' });
+    doc.text('Cel: 318 045 0369', 196, 29, { align: 'right' });
+
+    doc.setLineWidth(0.5);
+    doc.line(14, 33, 196, 33);
+
+    // --- TÍTULO DEL DOCUMENTO ---
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ORDEN DE SERVICIO EXTERNO Y REMISIÓN', 105, 40, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.text(`ID Solicitud: #${solicitud.id}`, 14, 46);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 196, 46, { align: 'right' });
+
+    // --- TABLA DE DATOS (REORDENADA) ---
+    autoTable(doc, {
+      startY: 50,
+      head: [['Detalle', 'Información']],
+      body: [
+        ['TALLER DESTINO / PROVEEDOR', nombreDestino], // Taller Destino primero
+        ['Placa del Vehículo', solicitud.placa_vehiculo || 'N/A'],
+        ['Sede Origen', solicitud.nombre_sede || 'General'],
+        ['Conductor Solicitante', solicitud.nombre_conductor || 'N/A'],
+        ['Falla Reportada', solicitud.necesidad_reportada || 'N/A'],
+        ['Diagnóstico Inicial', solicitud.diagnostico_taller || 'N/A']
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [44, 62, 80] },
+      styles: { fontSize: 9 },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 55 } }
+    });
+
+    // --- FIRMAS INTERNAS Y EXTERNAS ---
+    let finalY = doc.lastAutoTable.finalY + 15;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('AUTORIZACIÓN INTERNA', 14, finalY);
+    doc.text('RECEPCIÓN (PROVEEDOR)', 120, finalY);
+    
+    finalY += 15;
+    
+    // 1. Técnico
+    doc.line(14, finalY, 55, finalY);
+    if (solicitud.firma_taller_diagnostico) {
+      doc.addImage(solicitud.firma_taller_diagnostico, 'PNG', 14, finalY - 14, 35, 12);
+    }
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Técnico (Diagnóstico)', 14, finalY + 4);
+    
+    // 2. Coordinador
+    doc.line(65, finalY, 106, finalY);
+    if (solicitud.firma_coordinacion_aprobacion) {
+      doc.addImage(solicitud.firma_coordinacion_aprobacion, 'PNG', 65, finalY - 14, 35, 12);
+    }
+    doc.text('Coordinación (Aprueba)', 65, finalY + 4);
+
+    // 3. Proveedor Externo
+    doc.line(120, finalY, 196, finalY);
+    doc.text(`Recibe: ${nombreDestino}`, 120, finalY + 4);
+    doc.text('Firma legible / Sello del Taller', 120, finalY + 8);
+    doc.text('Fecha: _____/_____/202___   Hora: ______:______', 120, finalY + 14);
+
+    // --- LÍNEA DE CORTE ECOLÓGICA ---
+    const corteY = Math.max(135, finalY + 25);
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineDash([3, 3], 0); // Línea punteada
+    doc.line(10, corteY, 206, corteY);
+    
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text('✂️ Corte por esta línea para ahorrar papel', 105, corteY + 4, { align: 'center' });
+
+    doc.save(`Remision_Servicio_${solicitud.placa_vehiculo}_ID${solicitud.id}.pdf`);
+  };
+  // --- FIN NUEVO CÓDIGO ---
+
   // --- FUNCIÓN DE COLORES DE ESTADO ---
   const getStatusColor = (estado) => {
     const status = estado?.toLowerCase() || '';
@@ -222,6 +322,7 @@ const CoordinacionDashboard = () => {
     if (status.includes('taller') || status.includes('aprobado')) return { bg: '#e3f2fd', text: '#1565c0' };
     if (status.includes('rechazado')) return { bg: '#ffebee', text: '#c62828' };
     if (status.includes('cierre') || status.includes('terminado') || status.includes('finalizado')) return { bg: '#e8f5e9', text: '#2e7d32' };
+    if (status.includes('reparación')) return { bg: '#e8f5e9', text: '#2e7d32' };
     return { bg: '#eeeeee', text: '#424242' };
   };
 
@@ -422,6 +523,14 @@ const CoordinacionDashboard = () => {
                             </div>
                         </div>
                     </details>
+
+                    {/* --- INICIO NUEVO BOTÓN PARA PDF DE AUTORIZACIÓN --- */}
+                    {s.estado === 'En Reparación' && (
+                        <button onClick={() => generarOrdenAutorizadaPDF(s)} style={{ marginTop: '15px', width: '100%', padding: '10px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            📄 Descargar Orden Autorizada
+                        </button>
+                    )}
+                    {/* --- FIN NUEVO BOTÓN --- */}
 
                     {s.estado === 'Proceso Finalizado' && (
                         <button onClick={() => generarPDF(s)} style={{ marginTop: '15px', width: '100%', padding: '10px', backgroundColor: '#fff', color: '#0288d1', border: '2px solid #0288d1', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
