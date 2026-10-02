@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import NuevaSolicitudForm from './NuevaSolicitudForm';
 import api from '../../api/axios';
 import SignatureCanvas from 'react-signature-canvas';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const ConductorDashboard = () => {
   // 1. LÓGICA DE USUARIO Y SEDE
@@ -71,9 +73,99 @@ const ConductorDashboard = () => {
       if (status.includes('pendiente')) return { bg: '#fff3e0', text: '#e65100' };
       if (status.includes('taller') || status.includes('aprobado')) return { bg: '#e3f2fd', text: '#1565c0' };
       if (status.includes('rechazado')) return { bg: '#ffebee', text: '#c62828' };
-      if (status.includes('cierre') || status.includes('terminado') || status.includes('listo')) return { bg: '#e8f5e9', text: '#2e7d32' };
+      if (status.includes('cierre') || status.includes('terminado') || status.includes('listo') || status.includes('reparación')) return { bg: '#e8f5e9', text: '#2e7d32' };
       return { bg: '#eeeeee', text: '#424242' };
   };
+
+  // --- INICIO NUEVO CÓDIGO: PDF ORDEN MEDIA CARTA ---
+  const generarOrdenAutorizadaPDF = (solicitud) => {
+    const destinoExterno = window.prompt(
+      "¿A qué taller externo se enviará el vehículo? (Ej. CATERPILLAR)\nDeje en blanco si es para el Taller Interno:"
+    );
+    const nombreDestino = destinoExterno && destinoExterno.trim() !== "" ? destinoExterno.toUpperCase() : "TALLER INTERNO";
+
+    const doc = new jsPDF({ format: 'letter' });
+
+    // doc.addImage('/logo.png', 'PNG', 14, 10, 40, 20); // Actívalo si ya tienes el logo en public
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('IPS MUTUAL SAS', 196, 14, { align: 'right' });
+    
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text('NIT: 901274906', 196, 19, { align: 'right' });
+    doc.text('Dir: Calle 21N # 8-48 Ciudad Jardín', 196, 24, { align: 'right' });
+    doc.text('Cel: 318 045 0369', 196, 29, { align: 'right' });
+
+    doc.setLineWidth(0.5);
+    doc.line(14, 33, 196, 33);
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ORDEN DE SERVICIO EXTERNO Y REMISIÓN', 105, 40, { align: 'center' });
+    
+    doc.setFontSize(10);
+    doc.text(`ID Solicitud: #${solicitud.id}`, 14, 46);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 196, 46, { align: 'right' });
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Detalle', 'Información']],
+      body: [
+        ['TALLER DESTINO / PROVEEDOR', nombreDestino],
+        ['Placa del Vehículo', solicitud.placa_vehiculo || solicitud.placa || 'N/A'],
+        ['Sede Origen', solicitud.nombre_sede || solicitud.sede || 'General'],
+        ['Conductor Solicitante', solicitud.nombre_conductor || 'N/A'],
+        ['Falla Reportada', solicitud.necesidad_reportada || solicitud.descripcion_falla || 'N/A'],
+        ['Diagnóstico Inicial', solicitud.diagnostico_taller || 'N/A']
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [44, 62, 80] },
+      styles: { fontSize: 9 },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 55 } }
+    });
+
+    let finalY = doc.lastAutoTable.finalY + 15;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('AUTORIZACIÓN INTERNA', 14, finalY);
+    doc.text('RECEPCIÓN (PROVEEDOR)', 120, finalY);
+    
+    finalY += 15;
+    
+    doc.line(14, finalY, 55, finalY);
+    if (solicitud.firma_taller_diagnostico) {
+      doc.addImage(solicitud.firma_taller_diagnostico, 'PNG', 14, finalY - 14, 35, 12);
+    }
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Técnico (Diagnóstico)', 14, finalY + 4);
+    
+    doc.line(65, finalY, 106, finalY);
+    if (solicitud.firma_coordinacion_aprobacion) {
+      doc.addImage(solicitud.firma_coordinacion_aprobacion, 'PNG', 65, finalY - 14, 35, 12);
+    }
+    doc.text('Coordinación (Aprueba)', 65, finalY + 4);
+
+    doc.line(120, finalY, 196, finalY);
+    doc.text(`Recibe: ${nombreDestino}`, 120, finalY + 4);
+    doc.text('Firma legible / Sello del Taller', 120, finalY + 8);
+    doc.text('Fecha: _____/_____/202___   Hora: ______:______', 120, finalY + 14);
+
+    const corteY = Math.max(135, finalY + 25);
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineDash([3, 3], 0);
+    doc.line(10, corteY, 206, corteY);
+    
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text('✂️ Corte por esta línea para ahorrar papel', 105, corteY + 4, { align: 'center' });
+
+    doc.save(`Remision_Servicio_${solicitud.placa_vehiculo || 'ID'}_ID${solicitud.id}.pdf`);
+  };
+  // --- FIN NUEVO CÓDIGO ---
 
   return (
     // DISEÑO MOBILE-FIRST APLICADO
@@ -211,6 +303,14 @@ const ConductorDashboard = () => {
         </div>
     </div>
 </details>
+
+                      {/* --- INICIO NUEVO BOTÓN PARA PDF DE AUTORIZACIÓN --- */}
+                      {s.estado === 'En Reparación' && (
+                          <button onClick={() => generarOrdenAutorizadaPDF(s)} style={{ marginTop: '15px', width: '100%', padding: '10px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                              📄 Descargar Orden Autorizada
+                          </button>
+                      )}
+                      {/* --- FIN NUEVO BOTÓN --- */}
 
                       {/* SECCIÓN DE CONFIRMACIÓN DE ENTREGA (FIRMA) */}
                       {s.estado === 'Listo para Entrega' && (
