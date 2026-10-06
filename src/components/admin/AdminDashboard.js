@@ -85,7 +85,7 @@ const AdminDashboard = () => {
         
         let csvContent = "data:text/csv;charset=utf-8,";
         // Encabezados
-        csvContent += "ID,Placa,Conductor,Sede,Estado,Fecha Solicitud,Falla Reportada,Tecnico,Diagnostico,Trabajo Realizado,Fecha Cierre\n";
+        csvContent += "ID,Placa,Conductor,Sede,Estado,Inoperativo,Fecha Solicitud,Falla Reportada,Tecnico,Diagnostico,Trabajo Realizado,Fecha Cierre\n";
         
         // Datos
         solicitudesFiltradas.forEach(s => {
@@ -95,6 +95,7 @@ const AdminDashboard = () => {
                 `"${s.nombre_conductor || ''}"`,
                 s.nombre_sede,
                 s.estado,
+                s.fuera_de_servicio ? 'SI' : 'NO', // NUEVO CAMPO EN EXCEL
                 s.fecha_creacion ? new Date(s.fecha_creacion).toLocaleDateString() : '',
                 `"${(s.necesidad_reportada || '').replace(/"/g, '""')}"`,
                 `"${s.nombre_tecnico || ''}"`,
@@ -133,7 +134,7 @@ const AdminDashboard = () => {
                 s.placa_vehiculo,
                 s.nombre_sede || 'General',
                 s.nombre_conductor,
-                s.estado,
+                s.fuera_de_servicio ? `INOPERATIVO (${s.estado})` : s.estado, // NUEVO CAMPO EN PDF
                 s.necesidad_reportada.length > 30 ? s.necesidad_reportada.substring(0, 30) + '...' : s.necesidad_reportada,
                 new Date(s.fecha_creacion).toLocaleDateString()
             ];
@@ -513,9 +514,18 @@ const AdminDashboard = () => {
                                         <strong style={{ fontSize: '1.1rem' }}>{s.placa_vehiculo} <span style={{ color: '#888', fontSize: '0.85rem' }}>| ID #{s.id}</span></strong>
                                         <span style={{ fontSize: '0.85rem', color: '#555' }}>Sede: {s.nombre_sede || 'General'}</span>
                                     </div>
-                                    <span style={{ backgroundColor: colores.bg, color: colores.text, padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                                        {s.estado}
-                                    </span>
+                                    
+                                    {/* NUEVO: ETIQUETA HÍBRIDA (MUESTRA SI ESTÁ FUERA DE SERVICIO ADEMÁS DEL ESTADO DEL TICKET) */}
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        {s.fuera_de_servicio && (
+                                            <span style={{ backgroundColor: '#333', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                                                ⚫ INOPERATIVO
+                                            </span>
+                                        )}
+                                        <span style={{ backgroundColor: colores.bg, color: colores.text, padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                                            {s.estado}
+                                        </span>
+                                    </div>
                                 </summary>
                                 
                                 {/* LÍNEA DE TIEMPO CORPORATIVA PARA EL ADMIN */}
