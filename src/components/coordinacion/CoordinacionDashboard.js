@@ -20,6 +20,9 @@ const CoordinacionDashboard = () => {
   // NUEVO: ESTADO PARA EL BUSCADOR
   const [busqueda, setBusqueda] = useState('');
   
+  // NUEVO: ESTADO PARA CASILLA FUERA DE SERVICIO
+  const [fueraDeServicio, setFueraDeServicio] = useState({});
+  
   const sigCanvases = {}; // Referencias para las firmas
 
   // 3. CARGA DE DATOS
@@ -71,17 +74,25 @@ const CoordinacionDashboard = () => {
 
     const firma_coordinacion_aprobacion = sigCanvases[id].toDataURL();
     
+    // NUEVO: Obtenemos si la casilla fue marcada para este id
+    const marcar_fuera_servicio = fueraDeServicio[id] || false;
+    
     try {
       await api.put(`/solicitudes/decision/${id}`, { 
           decision, 
           motivo_rechazo, 
-          firma_coordinacion_aprobacion 
+          firma_coordinacion_aprobacion,
+          marcar_fuera_servicio // NUEVO: Enviamos el dato al backend
       });
       cargarDatos();
       alert(decision === 'Aprobado' ? "Solicitud aprobada." : "Solicitud rechazada.");
     } catch (error) {
       setMensaje('Error al procesar la decisión.');
     }
+  };
+
+  const handleCheckboxChange = (id, checked) => {
+      setFueraDeServicio(prev => ({ ...prev, [id]: checked }));
   };
 
   const handleCierre = async (id) => {
@@ -392,6 +403,20 @@ const CoordinacionDashboard = () => {
                         <SignatureCanvas ref={ref => { sigCanvases[s.id] = ref; }} canvasProps={{width: 300, height: 150, className: 'sigCanvas'}} />
                     </div>
                     
+                    {/* NUEVO: CASILLA PARA MARCAR FUERA DE SERVICIO */}
+                    <div style={{ backgroundColor: '#ffebee', padding: '10px', borderRadius: '8px', border: '1px solid #ffcdd2', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input 
+                            type="checkbox" 
+                            id={`fuera_servicio_${s.id}`} 
+                            checked={fueraDeServicio[s.id] || false}
+                            onChange={(e) => handleCheckboxChange(s.id, e.target.checked)}
+                            style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                        />
+                        <label htmlFor={`fuera_servicio_${s.id}`} style={{ margin: 0, cursor: 'pointer', color: '#b71c1c', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                            🚨 Marcar vehículo como FUERA DE SERVICIO (Daño grave / Larga duración)
+                        </label>
+                    </div>
+
                     {/* BOTONES LADO A LADO PARA CELULAR */}
                     <div style={{ display: 'flex', gap: '10px' }}>
                         <button onClick={() => handleDecision(s.id, 'Rechazado')} style={{ flex: 1, padding: '12px', backgroundColor: 'transparent', color: '#d32f2f', border: '2px solid #d32f2f', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>

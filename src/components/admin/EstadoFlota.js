@@ -6,10 +6,11 @@ const EstadoFlota = () => {
   const [cargando, setCargando] = useState(true);
   
   // Estado para las estadísticas separadas
+  // NUEVO: Agregamos el contador 'fuera' a cada categoría
   const [stats, setStats] = useState({
-    global: { total: 0, operativos: 0, taller: 0 },
-    florencia: { total: 0, operativos: 0, taller: 0 },
-    popayan: { total: 0, operativos: 0, taller: 0 }
+    global: { total: 0, operativos: 0, taller: 0, fuera: 0 },
+    florencia: { total: 0, operativos: 0, taller: 0, fuera: 0 },
+    popayan: { total: 0, operativos: 0, taller: 0, fuera: 0 }
   });
 
   useEffect(() => {
@@ -22,27 +23,35 @@ const EstadoFlota = () => {
         // --- CÁLCULO DE ESTADÍSTICAS POR SEDE ---
         
         // 1. Inicializar contadores
-        let global = { total: 0, operativos: 0, taller: 0 };
-        let florencia = { total: 0, operativos: 0, taller: 0 };
-        let popayan = { total: 0, operativos: 0, taller: 0 };
+        let global = { total: 0, operativos: 0, taller: 0, fuera: 0 };
+        let florencia = { total: 0, operativos: 0, taller: 0, fuera: 0 };
+        let popayan = { total: 0, operativos: 0, taller: 0, fuera: 0 };
 
         vehiculos.forEach(v => {
-            // Analizar estado
-            const esTaller = v.estado_actual === 'EN TALLER';
+            // Analizar estado (NUEVA LÓGICA DE 3 ESTADOS)
+            const esFueraServicio = v.fuera_de_servicio === true;
+            const esTaller = !esFueraServicio && v.estado_actual === 'EN TALLER';
+            const esOperativo = !esFueraServicio && !esTaller;
             
             // Sumar al Global
             global.total++;
-            if (esTaller) global.taller++; else global.operativos++;
+            if (esFueraServicio) global.fuera++;
+            else if (esTaller) global.taller++; 
+            else global.operativos++;
 
-            // Sumar a la Sede correspondiente (Normalizamos texto a minúsculas para comparar)
+            // Sumar a la Sede correspondiente
             const sedeNombre = v.sede ? v.sede.toLowerCase() : '';
 
             if (sedeNombre.includes('florencia')) {
                 florencia.total++;
-                if (esTaller) florencia.taller++; else florencia.operativos++;
+                if (esFueraServicio) florencia.fuera++;
+                else if (esTaller) florencia.taller++; 
+                else florencia.operativos++;
             } else if (sedeNombre.includes('popayán') || sedeNombre.includes('popayan')) {
                 popayan.total++;
-                if (esTaller) popayan.taller++; else popayan.operativos++;
+                if (esFueraServicio) popayan.fuera++;
+                else if (esTaller) popayan.taller++; 
+                else popayan.operativos++;
             }
         });
         
@@ -69,6 +78,11 @@ const EstadoFlota = () => {
             <div style={{ textAlign: 'center' }}>
                 <h2 style={{ marginBottom: 0, color: '#e74c3c' }}>{data.taller}</h2>
                 <small>🔴 Taller</small>
+            </div>
+            {/* NUEVO CONTADOR: FUERA DE SERVICIO */}
+            <div style={{ textAlign: 'center' }}>
+                <h2 style={{ marginBottom: 0, color: '#333' }}>{data.fuera}</h2>
+                <small>⚫ Fuera Servicio</small>
             </div>
             <div style={{ textAlign: 'center' }}>
                 <h2 style={{ marginBottom: 0, color: '#3498db' }}>{data.total}</h2>
@@ -109,32 +123,34 @@ const EstadoFlota = () => {
             </tr>
           </thead>
           <tbody>
-            {flota.map(v => (
+            {flota.map(v => {
+              // LÓGICA DE RENDERIZADO DEL ESTADO (3 COLORES)
+              let colorFondo = '#2ecc71'; // Verde por defecto
+              let textoEstado = '🟢 OPERATIVO';
+              
+              if (v.fuera_de_servicio) {
+                  colorFondo = '#333333'; // Negro/Gris muy oscuro
+                  textoEstado = '⚫ FUERA DE SERVICIO';
+              } else if (v.estado_actual === 'EN TALLER') {
+                  colorFondo = '#e74c3c'; // Rojo
+                  textoEstado = '🔴 EN TALLER';
+              }
+
+              return (
               <tr key={v.id}>
                 <td>
-                  {v.estado_actual === 'OPERATIVO' ? (
                     <span style={{ 
-                        backgroundColor: '#2ecc71', 
+                        backgroundColor: colorFondo, 
                         color: 'white', 
-                        padding: '4px 10px', 
+                        padding: '6px 12px', 
                         borderRadius: '15px', 
                         fontSize: '0.8rem',
-                        fontWeight: 'bold'
+                        fontWeight: 'bold',
+                        display: 'inline-block',
+                        whiteSpace: 'nowrap'
                     }}>
-                        🟢 OPERATIVO
+                        {textoEstado}
                     </span>
-                  ) : (
-                    <span style={{ 
-                        backgroundColor: '#e74c3c', 
-                        color: 'white', 
-                        padding: '4px 10px', 
-                        borderRadius: '15px', 
-                        fontSize: '0.8rem',
-                        fontWeight: 'bold'
-                    }}>
-                        🔴 EN TALLER
-                    </span>
-                  )}
                 </td>
                 <td><strong>{v.nombre}</strong></td>
                 <td>
@@ -152,7 +168,7 @@ const EstadoFlota = () => {
                     {v.sede === 'Popayán' ? '🏙️ Popayán' : v.sede === 'Florencia' ? '🌴 Florencia' : 'Sin Asignar'}
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </figure>

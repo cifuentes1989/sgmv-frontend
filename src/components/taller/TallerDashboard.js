@@ -79,6 +79,21 @@ const TallerDashboard = () => {
     } catch (error) { setMensaje('Error al finalizar la reparación.'); }
   };
 
+  // --- NUEVA FUNCIÓN: BOTÓN DE PÁNICO (FUERA DE SERVICIO MANUAL) ---
+  const handleReportarFueraServicio = async (id, placa) => {
+      const confirmacion = window.confirm(`🚨 ADVERTENCIA: ¿Estás seguro que deseas reportar la ambulancia ${placa} como FUERA DE SERVICIO por daño de larga duración? Esto alertará a Gerencia inmediatamente.`);
+      
+      if(confirmacion) {
+          try {
+              await api.put(`/solicitudes/taller/fuera-servicio/${id}`);
+              alert(`✅ El vehículo ${placa} ha sido marcado como Fuera de Servicio exitosamente.`);
+          } catch (error) {
+              console.error(error);
+              alert('Error al reportar el vehículo.');
+          }
+      }
+  };
+
   const getStatusColor = (estado) => {
       const status = estado?.toLowerCase() || '';
       if (status.includes('pendiente')) return { bg: '#fff3e0', text: '#e65100' };
@@ -265,10 +280,18 @@ const TallerDashboard = () => {
                         <p style={{ margin: '0', fontSize: '0.8rem', color: '#5c6bc0' }}>Aprobó: {solicitud.nombre_coordinador || 'Coordinación'}</p>
                     </div>
 
-                    {/* --- BOTÓN PARA DESCARGAR ORDEN AUTORIZADA --- */}
-                    <button onClick={() => generarOrdenAutorizadaPDF(solicitud)} style={{ marginBottom: '15px', width: '100%', padding: '10px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                        📄 Descargar Orden Autorizada
-                    </button>
+                    {/* --- BOTONES DE ACCIÓN PARA EL TALLER --- */}
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
+                        {/* 1. Botón de Orden Autorizada */}
+                        <button onClick={() => generarOrdenAutorizadaPDF(solicitud)} style={{ flex: '1 1 100%', padding: '10px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            📄 Descargar Orden Autorizada
+                        </button>
+                        
+                        {/* 2. NUEVO: BOTÓN DE PÁNICO (FUERA DE SERVICIO MANUAL) */}
+                        <button onClick={() => handleReportarFueraServicio(solicitud.id, solicitud.placa_vehiculo)} style={{ flex: '1 1 100%', padding: '10px', backgroundColor: 'transparent', color: '#b71c1c', border: '2px solid #b71c1c', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            🚨 Reportar Fuera de Servicio (Larga duración)
+                        </button>
+                    </div>
                     
                     {finalizacionAbiertaId === solicitud.id ? (
                     <form onSubmit={handleFinalizarReparacion} style={{ backgroundColor: '#e3f2fd', padding: '15px', borderRadius: '12px', marginTop: '10px' }}>
