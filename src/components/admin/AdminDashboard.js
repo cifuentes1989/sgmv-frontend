@@ -3,7 +3,7 @@ import api from '../../api/axios';
 import { Pie, Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable'; // <-- Importación corregida para evitar errores
+import autoTable from 'jspdf-autotable';
 import EstadoFlota from './EstadoFlota';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
@@ -24,11 +24,14 @@ const AdminDashboard = () => {
     
     const [busquedaUsuario, setBusquedaUsuario] = useState('');
     const [busquedaVehiculo, setBusquedaVehiculo] = useState('');
-    // NUEVO: Buscador Universal para Solicitudes
     const [busquedaSolicitud, setBusquedaSolicitud] = useState(''); 
     
     const [nuevoUsuario, setNuevoUsuario] = useState({ nombre_completo: '', email: '', password: '', rol: 'Conductor', sede_id: '' });
     const [nuevoVehiculo, setNuevoVehiculo] = useState({ nombre: '', placa: '', marca: '', modelo: '', sede_id: '' });
+
+    // NUEVO ESTADO PARA EL ARCHIVO
+    const [archivosUpload, setArchivosUpload] = useState({});
+    const [subiendoArchivo, setSubiendoArchivo] = useState(false);
 
     const handleLogout = () => {
         localStorage.removeItem('token');
@@ -36,38 +39,62 @@ const AdminDashboard = () => {
         window.location.href = '/';
     };
 
-    useEffect(() => {
-        const cargarDatos = async () => {
-            try {
-                if (sedes.length === 0) setSedes([{id: 1, nombre: 'Florencia'}, {id: 2, nombre: 'Popayán'}]);
-                if (vista === 'informes' && !datosInforme) {
-                    const res = await api.get('/admin/informes/datos');
-                    setDatosInforme(res.data);
-                } else if (vista === 'usuarios') {
-                    const res = await api.get('/admin/usuarios');
-                    setUsuarios(res.data);
-                } else if (vista === 'vehiculos') {
-                    const res = await api.get('/vehiculos');
-                    setVehiculos(res.data);
-                }
-            } catch (error) { console.error(`Error cargando datos para ${vista}`, error); }
-        };
-        if (!vista.includes('_reload')) cargarDatos();
-    }, [vista, datosInforme, sedes.length]);
-    
-    useEffect(() => {
-        const cargarSolicitudesFiltradas = async () => {
-            if (vista === 'solicitudes') {
-                try {
-                    const res = await api.get(`/admin/solicitudes/todas?sede_id=${filtroSede}`);
-                    setSolicitudes(res.data);
-                } catch (error) { console.error("Error al filtrar solicitudes", error); }
+    const cargarDatos = async () => {
+        try {
+            if (sedes.length === 0) setSedes([{id: 1, nombre: 'Florencia'}, {id: 2, nombre: 'Popayán'}]);
+            if (vista === 'informes' && !datosInforme) {
+                const res = await api.get('/admin/informes/datos');
+                setDatosInforme(res.data);
+            } else if (vista === 'usuarios') {
+                const res = await api.get('/admin/usuarios');
+                setUsuarios(res.data);
+            } else if (vista === 'vehiculos') {
+                const res = await api.get('/vehiculos');
+                setVehiculos(res.data);
+            } else if (vista === 'solicitudes' || vista === 'archivo') {
+                const res = await api.get(`/admin/solicitudes/todas?sede_id=${filtroSede}`);
+                setSolicitudes(res.data);
             }
-        };
-        cargarSolicitudesFiltradas();
+        } catch (error) { console.error(`Error cargando datos para ${vista}`, error); }
+    };
+
+    useEffect(() => {
+        cargarDatos();
     }, [vista, filtroSede]);
 
-    // --- NUEVO: FILTRO INTELIGENTE DE SOLICITUDES ---
+    // --- FUNCIONES PARA SUBIR EVIDENCIA (ARCHIVOS) ---
+    const handleFileSelect = (id, file) => {
+        setArchivosUpload(prev => ({ ...prev, [id]: file }));
+    };
+
+    const handleSubirEvidencia = async (id) => {
+        const file = archivosUpload[id];
+        if (!file) return alert("Por favor, selecciona un archivo (PDF o Imagen) primero.");
+
+        const formData = new FormData();
+        formData.append('evidencia', file);
+
+        setSubiendoArchivo(true);
+        try {
+            await api.put(`/solicitudes/archivo/subir-evidencia/${id}`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            alert("✅ Evidencia subida a la nube y proceso FINALIZADO permanentemente.");
+            setArchivosUpload(prev => {
+                const nuevo = {...prev};
+                delete nuevo[id];
+                return nuevo;
+            });
+            cargarDatos(); // Recargar lista
+        } catch (error) {
+            console.error(error);
+            alert("Error al subir el archivo. Verifica tu conexión.");
+        } finally {
+            setSubiendoArchivo(false);
+        }
+    };
+
+    // --- FILTROS INTELIGENTES ---
     const solicitudesFiltradas = solicitudes.filter(s => {
         const termino = busquedaSolicitud.toLowerCase();
         return (
@@ -79,15 +106,16 @@ const AdminDashboard = () => {
         );
     });
 
-    // --- NUEVO: EXPORTAR A EXCEL (CSV) ---
+    // Filtramos específicamente las pendientes de archivo
+    const solicitudesParaArchivo = solicitudesFiltradas.filter(s => s.estado === 'Pendiente de Archivo');
+
+    // --- EXPORTAR A EXCEL (CSV) ---
     const exportarAExcel = () => {
         if (solicitudesFiltradas.length === 0) return alert("No hay datos para exportar.");
         
         let csvContent = "data:text/csv;charset=utf-8,";
-        // Encabezados
-        csvContent += "ID,Placa,Conductor,Sede,Estado,Inoperativo,Fecha Solicitud,Falla Reportada,Tecnico,Diagnostico,Trabajo Realizado,Fecha Cierre\n";
+        csvContent += "ID,Placa,Conductor,Sede,Estado,Inoperativo,Fecha Solicitud,Falla Reportada,Tecnico,Diagnostico,Trabajo Realizado,Fecha Cierre,URL Soportes\n";
         
-        // Datos
         solicitudesFiltradas.forEach(s => {
             const row = [
                 s.id,
@@ -95,13 +123,14 @@ const AdminDashboard = () => {
                 `"${s.nombre_conductor || ''}"`,
                 s.nombre_sede,
                 s.estado,
-                s.fuera_de_servicio ? 'SI' : 'NO', // NUEVO CAMPO EN EXCEL
+                s.fuera_de_servicio ? 'SI' : 'NO',
                 s.fecha_creacion ? new Date(s.fecha_creacion).toLocaleDateString() : '',
                 `"${(s.necesidad_reportada || '').replace(/"/g, '""')}"`,
                 `"${s.nombre_tecnico || ''}"`,
                 `"${(s.diagnostico_taller || '').replace(/"/g, '""')}"`,
                 `"${(s.trabajos_realizados || '').replace(/"/g, '""')}"`,
-                s.fecha_cierre_proceso ? new Date(s.fecha_cierre_proceso).toLocaleDateString() : ''
+                s.fecha_cierre_proceso ? new Date(s.fecha_cierre_proceso).toLocaleDateString() : '',
+                s.url_evidencia_externa ? s.url_evidencia_externa : 'Sin soporte'
             ].join(",");
             csvContent += row + "\n";
         });
@@ -115,10 +144,10 @@ const AdminDashboard = () => {
         document.body.removeChild(link);
     };
 
-    // --- NUEVO: EXPORTAR A PDF (TABULAR) ---
+    // --- EXPORTAR A PDF (TABULAR) ---
     const exportarAPDF = () => {
         if (solicitudesFiltradas.length === 0) return alert("No hay datos para exportar.");
-        const doc = new jsPDF('landscape'); // Formato horizontal
+        const doc = new jsPDF('landscape'); 
         
         doc.setFontSize(16);
         doc.text('Reporte General de Solicitudes SGMV', 14, 15);
@@ -134,7 +163,7 @@ const AdminDashboard = () => {
                 s.placa_vehiculo,
                 s.nombre_sede || 'General',
                 s.nombre_conductor,
-                s.fuera_de_servicio ? `INOPERATIVO (${s.estado})` : s.estado, // NUEVO CAMPO EN PDF
+                s.fuera_de_servicio ? `INOPERATIVO (${s.estado})` : s.estado,
                 s.necesidad_reportada.length > 30 ? s.necesidad_reportada.substring(0, 30) + '...' : s.necesidad_reportada,
                 new Date(s.fecha_creacion).toLocaleDateString()
             ];
@@ -152,76 +181,45 @@ const AdminDashboard = () => {
         doc.save(`Reporte_Solicitudes_${new Date().toISOString().split('T')[0]}.pdf`);
     };
 
-    // --- INICIO NUEVO CÓDIGO: PDF ORDEN MEDIA CARTA ---
     const generarOrdenAutorizadaPDF = (solicitud) => {
-        const destinoExterno = window.prompt(
-            "¿A qué taller externo se enviará el vehículo? (Ej. CATERPILLAR)\nDeje en blanco si es para el Taller Interno:"
-        );
+        const destinoExterno = window.prompt("¿A qué taller externo se enviará el vehículo?\nDeje en blanco si es para el Taller Interno:");
         const nombreDestino = destinoExterno && destinoExterno.trim() !== "" ? destinoExterno.toUpperCase() : "TALLER INTERNO";
-
         const doc = new jsPDF({ format: 'letter' });
 
-        // doc.addImage('/logo.png', 'PNG', 14, 10, 40, 20); // Actívalo si ya tienes el logo en public
-
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('IPS MUTUAL SAS', 196, 14, { align: 'right' });
-        
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.text('IPS MUTUAL SAS', 196, 14, { align: 'right' });
+        doc.setFontSize(9); doc.setFont('helvetica', 'normal');
         doc.text('NIT: 901274906', 196, 19, { align: 'right' });
         doc.text('Dir: Calle 21N # 8-48 Ciudad Jardín', 196, 24, { align: 'right' });
         doc.text('Cel: 318 045 0369', 196, 29, { align: 'right' });
-
-        doc.setLineWidth(0.5);
-        doc.line(14, 33, 196, 33);
-
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('ORDEN DE SERVICIO EXTERNO Y REMISIÓN', 105, 40, { align: 'center' });
-        
-        doc.setFontSize(10);
-        doc.text(`ID Solicitud: #${solicitud.id}`, 14, 46);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 196, 46, { align: 'right' });
+        doc.setLineWidth(0.5); doc.line(14, 33, 196, 33);
+        doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.text('ORDEN DE SERVICIO EXTERNO Y REMISIÓN', 105, 40, { align: 'center' });
+        doc.setFontSize(10); doc.text(`ID Solicitud: #${solicitud.id}`, 14, 46);
+        doc.setFont('helvetica', 'normal'); doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 196, 46, { align: 'right' });
 
         autoTable(doc, {
             startY: 50,
             head: [['Detalle', 'Información']],
             body: [
                 ['TALLER DESTINO / PROVEEDOR', nombreDestino],
-                ['Placa del Vehículo', solicitud.placa_vehiculo || solicitud.placa || 'N/A'],
-                ['Sede Origen', solicitud.nombre_sede || solicitud.sede || 'General'],
+                ['Placa del Vehículo', solicitud.placa_vehiculo || 'N/A'],
+                ['Sede Origen', solicitud.nombre_sede || 'General'],
                 ['Conductor Solicitante', solicitud.nombre_conductor || 'N/A'],
-                ['Falla Reportada', solicitud.necesidad_reportada || solicitud.descripcion_falla || 'N/A'],
+                ['Falla Reportada', solicitud.necesidad_reportada || 'N/A'],
                 ['Diagnóstico Inicial', solicitud.diagnostico_taller || 'N/A']
             ],
-            theme: 'striped',
-            headStyles: { fillColor: [44, 62, 80] },
-            styles: { fontSize: 9 },
-            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 55 } }
+            theme: 'striped', headStyles: { fillColor: [44, 62, 80] }, styles: { fontSize: 9 }, columnStyles: { 0: { fontStyle: 'bold', cellWidth: 55 } }
         });
 
         let finalY = doc.lastAutoTable.finalY + 15;
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.text('AUTORIZACIÓN INTERNA', 14, finalY);
-        doc.text('RECEPCIÓN (PROVEEDOR)', 120, finalY);
-        
+        doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+        doc.text('AUTORIZACIÓN INTERNA', 14, finalY); doc.text('RECEPCIÓN (PROVEEDOR)', 120, finalY);
         finalY += 15;
-        
         doc.line(14, finalY, 55, finalY);
-        if (solicitud.firma_taller_diagnostico) {
-            doc.addImage(solicitud.firma_taller_diagnostico, 'PNG', 14, finalY - 14, 35, 12);
-        }
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Técnico (Diagnóstico)', 14, finalY + 4);
+        if (solicitud.firma_taller_diagnostico) doc.addImage(solicitud.firma_taller_diagnostico, 'PNG', 14, finalY - 14, 35, 12);
+        doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.text('Técnico (Diagnóstico)', 14, finalY + 4);
         
         doc.line(65, finalY, 106, finalY);
-        if (solicitud.firma_coordinacion_aprobacion) {
-            doc.addImage(solicitud.firma_coordinacion_aprobacion, 'PNG', 65, finalY - 14, 35, 12);
-        }
+        if (solicitud.firma_coordinacion_aprobacion) doc.addImage(solicitud.firma_coordinacion_aprobacion, 'PNG', 65, finalY - 14, 35, 12);
         doc.text('Coordinación (Aprueba)', 65, finalY + 4);
 
         doc.line(120, finalY, 196, finalY);
@@ -230,44 +228,36 @@ const AdminDashboard = () => {
         doc.text('Fecha: _____/_____/202___   Hora: ______:______', 120, finalY + 14);
 
         const corteY = Math.max(135, finalY + 25);
-        doc.setDrawColor(150, 150, 150);
-        doc.setLineDash([3, 3], 0);
-        doc.line(10, corteY, 206, corteY);
-        
-        doc.setFontSize(8);
-        doc.setTextColor(150);
-        doc.text('✂️ Corte por esta línea para ahorrar papel', 105, corteY + 4, { align: 'center' });
+        doc.setDrawColor(150, 150, 150); doc.setLineDash([3, 3], 0); doc.line(10, corteY, 206, corteY);
+        doc.setFontSize(8); doc.setTextColor(150); doc.text('✂️ Corte por esta línea para ahorrar papel', 105, corteY + 4, { align: 'center' });
 
         doc.save(`Remision_Servicio_${solicitud.placa_vehiculo || 'ID'}_ID${solicitud.id}.pdf`);
     };
-    // --- FIN NUEVO CÓDIGO ---
 
     const handleCrearUsuario = async (e) => {
         e.preventDefault();
-        if (!nuevoUsuario.sede_id) return alert('Por favor, selecciona una sede.');
         try {
             await api.post('/admin/usuarios', nuevoUsuario);
             alert('Usuario creado con éxito');
             setNuevoUsuario({ nombre_completo: '', email: '', password: '', rol: 'Conductor', sede_id: '' });
-            const res = await api.get('/admin/usuarios'); setUsuarios(res.data);
-        } catch (error) { alert(`Error: ${error.response?.data?.msg || error.message || 'Error desconocido'}`); }
+            cargarDatos();
+        } catch (error) { alert(`Error: ${error.response?.data?.msg || error.message}`); }
     };
 
     const handleCrearVehiculo = async (e) => {
         e.preventDefault();
-        if (!nuevoVehiculo.sede_id) return alert('Por favor, selecciona una sede.');
         try {
             await api.post('/vehiculos', nuevoVehiculo);
             alert('Vehículo creado con éxito');
             setNuevoVehiculo({ nombre: '', placa: '', marca: '', modelo: '', sede_id: '' });
-            const res = await api.get('/vehiculos'); setVehiculos(res.data);
-        } catch (error) { alert(`Error: ${error.response?.data?.msg || error.message || 'Error desconocido'}`); }
+            cargarDatos();
+        } catch (error) { alert(`Error: ${error.response?.data?.msg || error.message}`); }
     };
 
     const handleCambiarSedeVehiculo = async (vehiculoId, nuevaSedeId) => {
         try {
             await api.put(`/vehiculos/${vehiculoId}/sede`, { sede_id: nuevaSedeId });
-            const res = await api.get('/vehiculos'); setVehiculos(res.data); alert('Sede actualizada correctamente');
+            cargarDatos(); alert('Sede actualizada correctamente');
         } catch (error) { alert('Error al cambiar la sede del vehículo'); }
     };
 
@@ -292,6 +282,7 @@ const AdminDashboard = () => {
 
     const getStatusColor = (estado) => {
         const status = estado?.toLowerCase() || '';
+        if (status.includes('pendiente de archivo')) return { bg: '#fff9c4', text: '#f57f17' }; // Amarillo/Naranja
         if (status.includes('pendiente') || status.includes('creada')) return { bg: '#fff3e0', text: '#e65100' };
         if (status.includes('taller') || status.includes('aprobado') || status.includes('reparacion') || status.includes('reparación')) return { bg: '#e3f2fd', text: '#1565c0' };
         if (status.includes('rechazado')) return { bg: '#ffebee', text: '#c62828' };
@@ -320,17 +311,77 @@ const AdminDashboard = () => {
                 <button onClick={handleLogout} style={{ backgroundColor: 'transparent', border: '1px solid #dc3545', color: '#dc3545', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Salir</button>
             </header>
 
-            {/* NAVEGACIÓN TABS */}
+            {/* NAVEGACIÓN TABS (NUEVA PESTAÑA ARCHIVO AÑADIDA) */}
             <nav style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '20px' }}>
                 <button onClick={() => setVista('dashboard')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'dashboard' ? '#0288d1' : '#e0e0e0', color: vista === 'dashboard' ? 'white' : '#333', whiteSpace: 'nowrap' }}>📊 Estado Flota</button>
+                <button onClick={() => setVista('archivo')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'archivo' ? '#f57c00' : '#e0e0e0', color: vista === 'archivo' ? 'white' : '#333', whiteSpace: 'nowrap' }}>📁 Archivo (Facturas)</button>
+                <button onClick={() => setVista('solicitudes')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'solicitudes' ? '#0288d1' : '#e0e0e0', color: vista === 'solicitudes' ? 'white' : '#333', whiteSpace: 'nowrap' }}>📋 Auditoría Solicitudes</button>
                 <button onClick={() => setVista('informes')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'informes' ? '#0288d1' : '#e0e0e0', color: vista === 'informes' ? 'white' : '#333', whiteSpace: 'nowrap' }}>Informes</button>
                 <button onClick={() => setVista('usuarios')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'usuarios' ? '#0288d1' : '#e0e0e0', color: vista === 'usuarios' ? 'white' : '#333', whiteSpace: 'nowrap' }}>Usuarios</button>
                 <button onClick={() => setVista('vehiculos')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'vehiculos' ? '#0288d1' : '#e0e0e0', color: vista === 'vehiculos' ? 'white' : '#333', whiteSpace: 'nowrap' }}>Vehículos</button>
-                <button onClick={() => setVista('solicitudes')} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: vista === 'solicitudes' ? '#0288d1' : '#e0e0e0', color: vista === 'solicitudes' ? 'white' : '#333', whiteSpace: 'nowrap' }}>📋 Solicitudes (Exportar)</button>
             </nav>
 
             {/* --- VISTA 1: DASHBOARD --- */}
             {vista === 'dashboard' && <EstadoFlota />}
+
+            {/* --- VISTA NUEVA: ARCHIVO DE FACTURAS --- */}
+            {vista === 'archivo' && (
+                <article style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <h3 style={{ margin: 0, color: '#e65100' }}>📁 Recepción de Soportes y Cierre Definitivo</h3>
+                        <span style={{ backgroundColor: '#fff3e0', color: '#e65100', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold' }}>
+                            Pendientes: {solicitudesParaArchivo.length}
+                        </span>
+                    </div>
+                    
+                    <p style={{ color: '#666', marginBottom: '20px' }}>
+                        Sube la foto de la factura, cuenta de cobro o remisión del taller para finalizar el proceso administrativamente en el sistema.
+                    </p>
+
+                    <div>
+                        {solicitudesParaArchivo.length > 0 ? solicitudesParaArchivo.map(s => (
+                            <div key={s.id} style={{ backgroundColor: '#fcfcfc', border: '1px solid #e0e0e0', borderRadius: '8px', padding: '15px', marginBottom: '15px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '10px' }}>
+                                    <div>
+                                        <strong style={{ fontSize: '1.1rem' }}>{s.placa_vehiculo} | ID #{s.id}</strong><br/>
+                                        <span style={{ fontSize: '0.85rem', color: '#555' }}>Vehículo: {s.nombre_vehiculo} - Sede: {s.nombre_sede || 'General'}</span>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <span style={{ fontSize: '0.85rem', color: '#888' }}>Entregado el:</span><br/>
+                                        <strong>{new Date(s.fecha_cierre_proceso || s.hora_salida_taller).toLocaleDateString()}</strong>
+                                    </div>
+                                </div>
+                                
+                                <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                    <div style={{ flex: 1, minWidth: '250px' }}>
+                                        <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px', fontSize: '0.9rem' }}>Adjuntar Soportes (PDF/JPG/PNG):</label>
+                                        <input 
+                                            type="file" 
+                                            accept=".pdf, image/*" 
+                                            onChange={(e) => handleFileSelect(s.id, e.target.files[0])}
+                                            style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }} 
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={() => handleSubirEvidencia(s.id)}
+                                        disabled={subiendoArchivo || !archivosUpload[s.id]}
+                                        style={{ 
+                                            padding: '10px 20px', backgroundColor: (subiendoArchivo || !archivosUpload[s.id]) ? '#ccc' : '#f57c00', 
+                                            color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: (subiendoArchivo || !archivosUpload[s.id]) ? 'not-allowed' : 'pointer' 
+                                        }}
+                                    >
+                                        {subiendoArchivo && archivosUpload[s.id] ? 'Subiendo nube...' : '☁️ Subir y Archivar'}
+                                    </button>
+                                </div>
+                            </div>
+                        )) : (
+                            <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#f9f9f9', borderRadius: '12px' }}>
+                                <p style={{ color: '#888', fontSize: '1.1rem', margin: 0 }}>🎉 No hay vehículos pendientes de soportes físicos.</p>
+                            </div>
+                        )}
+                    </div>
+                </article>
+            )}
 
             {/* --- VISTA 2: INFORMES --- */}
             {vista === 'informes' && (
@@ -515,7 +566,6 @@ const AdminDashboard = () => {
                                         <span style={{ fontSize: '0.85rem', color: '#555' }}>Sede: {s.nombre_sede || 'General'}</span>
                                     </div>
                                     
-                                    {/* NUEVO: ETIQUETA HÍBRIDA (MUESTRA SI ESTÁ FUERA DE SERVICIO ADEMÁS DEL ESTADO DEL TICKET) */}
                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                         {s.fuera_de_servicio && (
                                             <span style={{ backgroundColor: '#333', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
@@ -528,70 +578,57 @@ const AdminDashboard = () => {
                                     </div>
                                 </summary>
                                 
-                                {/* LÍNEA DE TIEMPO CORPORATIVA PARA EL ADMIN */}
                                 <div style={{ padding: '20px', backgroundColor: 'white' }}>
                                     <div style={{ borderLeft: '3px solid #e0e0e0', paddingLeft: '20px', marginLeft: '10px' }}>
                                         
-                                        {/* CREACIÓN */}
+                                        {/* LÍNEA DE TIEMPO DEL TICKET */}
                                         <div style={{ position: 'relative', marginBottom: '20px' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#0288d1', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: '#0288d1', fontSize: '1rem' }}><strong>1. Solicitud Inicial</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {new Date(s.fecha_creacion).toLocaleString('es-CO')}</p>
-                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}><strong>Conductor:</strong> {s.nombre_conductor}</p>
-                                            <p style={{ margin: '2px 0 0 0', fontSize: '0.9rem' }}><strong>Falla Reportada:</strong> {s.necesidad_reportada}</p>
                                         </div>
 
-                                        {/* DIAGNÓSTICO */}
                                         {s.diagnostico_taller && (
                                         <div style={{ position: 'relative', marginBottom: '20px' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#f57c00', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: '#f57c00', fontSize: '1rem' }}><strong>2. Diagnóstico Taller</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {s.hora_ingreso_taller ? new Date(s.hora_ingreso_taller).toLocaleString('es-CO') : 'Sin fecha'}</p>
-                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}><strong>Técnico:</strong> {s.nombre_tecnico}</p>
-                                            <p style={{ margin: '2px 0 0 0', fontSize: '0.9rem' }}><strong>Diagnóstico:</strong> {s.diagnostico_taller}</p>
                                         </div>
                                         )}
 
-                                        {/* DECISIÓN */}
                                         {s.fecha_aprobacion_rechazo && (
                                         <div style={{ position: 'relative', marginBottom: '20px' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1rem' }}><strong>3. Decisión Coordinación</strong></p>
-                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {new Date(s.fecha_aprobacion_rechazo).toLocaleString('es-CO')}</p>
-                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}><strong>Decisión:</strong> {s.motivo_rechazo ? `Rechazado (${s.motivo_rechazo})` : 'Aprobado'}</p>
                                         </div>
                                         )}
 
-                                        {/* REPARACIÓN */}
                                         {s.trabajos_realizados && (
                                         <div style={{ position: 'relative', marginBottom: '20px' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#1976d2', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: '#1976d2', fontSize: '1rem' }}><strong>4. Reparación Realizada</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {s.hora_salida_taller ? new Date(s.hora_salida_taller).toLocaleString('es-CO') : 'Sin fecha'}</p>
-                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem' }}><strong>Trabajo:</strong> {s.trabajos_realizados}</p>
-                                            <p style={{ margin: '2px 0 0 0', fontSize: '0.9rem', color: '#555' }}>Repuestos: {s.repuestos_utilizados || 'Ninguno'}</p>
                                         </div>
                                         )}
 
-                                        {/* CIERRE */}
                                         {s.fecha_cierre_proceso && (
-                                        <div style={{ position: 'relative', marginBottom: '0' }}>
+                                        <div style={{ position: 'relative', marginBottom: '20px' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#388e3c', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
-                                            <p style={{ margin: 0, color: '#388e3c', fontSize: '1rem' }}><strong>5. Cierre Final</strong></p>
+                                            <p style={{ margin: 0, color: '#388e3c', fontSize: '1rem' }}><strong>5. Cierre Operativo</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {new Date(s.fecha_cierre_proceso).toLocaleString('es-CO')}</p>
-                                            <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem', fontStyle: 'italic' }}>Obs. Conductor: "{s.observaciones_entrega_conductor || 'Ninguna'}"</p>
+                                        </div>
+                                        )}
+
+                                        {s.url_evidencia_externa && (
+                                        <div style={{ position: 'relative', marginBottom: '0' }}>
+                                            <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#9c27b0', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
+                                            <p style={{ margin: 0, color: '#9c27b0', fontSize: '1rem' }}><strong>6. Soportes Archivados</strong></p>
+                                            <a href={s.url_evidencia_externa} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '10px', padding: '8px 15px', backgroundColor: '#f3e5f5', color: '#6a1b9a', borderRadius: '5px', textDecoration: 'none', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                                📎 Ver Documento Adjunto
+                                            </a>
                                         </div>
                                         )}
                                     </div>
-
-                                    {/* --- INICIO NUEVO BOTÓN PARA PDF DE AUTORIZACIÓN --- */}
-                                    {s.estado === 'En Reparación' && (
-                                        <button onClick={() => generarOrdenAutorizadaPDF(s)} style={{ marginTop: '20px', width: '100%', padding: '12px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                                            📄 Descargar Orden Autorizada
-                                        </button>
-                                    )}
-                                    {/* --- FIN NUEVO BOTÓN --- */}
-
                                 </div>
                             </details>
                         )}) : (
