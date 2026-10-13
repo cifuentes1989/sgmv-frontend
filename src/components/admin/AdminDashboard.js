@@ -344,7 +344,7 @@ const AdminDashboard = () => {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee', paddingBottom: '10px', marginBottom: '10px' }}>
                                     <div>
                                         <strong style={{ fontSize: '1.1rem' }}>{s.placa_vehiculo} | ID #{s.id}</strong><br/>
-                                        <span style={{ fontSize: '0.85rem', color: '#555' }}>Vehículo: {s.nombre_vehiculo} - Sede: {s.nombre_sede || 'General'}</span>
+                                        <span style={{ fontSize: '0.85rem', color: '#555' }}>Vehículo: {s.nombre_vehiculo} Sede: {s.nombre_sede || 'General'}</span>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <span style={{ fontSize: '0.85rem', color: '#888' }}>Entregado el:</span><br/>
@@ -581,11 +581,18 @@ const AdminDashboard = () => {
                                 <div style={{ padding: '20px', backgroundColor: 'white' }}>
                                     <div style={{ borderLeft: '3px solid #e0e0e0', paddingLeft: '20px', marginLeft: '10px' }}>
                                         
-                                        {/* LÍNEA DE TIEMPO DEL TICKET */}
+                                        {/* --- LÍNEA DE TIEMPO DEL TICKET CON TEXTOS DESCRIPTIVOS AÑADIDOS --- */}
                                         <div style={{ position: 'relative', marginBottom: '20px' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#0288d1', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: '#0288d1', fontSize: '1rem' }}><strong>1. Solicitud Inicial</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {new Date(s.fecha_creacion).toLocaleString('es-CO')}</p>
+                                            
+                                            {/* Nuevo bloque de texto descriptivo */}
+                                            {s.necesidad_reportada && (
+                                                <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#e1f5fe', borderRadius: '6px', fontSize: '0.9rem', color: '#333' }}>
+                                                    <strong>Falla reportada por Conductor:</strong> {s.necesidad_reportada}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {s.diagnostico_taller && (
@@ -593,13 +600,23 @@ const AdminDashboard = () => {
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#f57c00', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: '#f57c00', fontSize: '1rem' }}><strong>2. Diagnóstico Taller</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {s.hora_ingreso_taller ? new Date(s.hora_ingreso_taller).toLocaleString('es-CO') : 'Sin fecha'}</p>
+                                            
+                                            {/* Nuevo bloque de texto descriptivo */}
+                                            <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#fff3e0', borderRadius: '6px', fontSize: '0.9rem', color: '#333' }}>
+                                                <strong>Diagnóstico y Presupuesto:</strong> {s.diagnostico_taller}
+                                            </div>
                                         </div>
                                         )}
 
-                                        {s.fecha_aprobacion_rechazo && (
+                                        {(s.firma_coordinacion_aprobacion || s.motivo_rechazo) && (
                                         <div style={{ position: 'relative', marginBottom: '20px' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
-                                            <p style={{ margin: 0, color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1rem' }}><strong>3. Decisión Coordinación</strong></p>
+                                            <p style={{ margin: 0, color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1rem' }}><strong>3. {s.motivo_rechazo ? 'Solicitud Rechazada' : 'Aprobación Coordinación'}</strong></p>
+                                            
+                                            {/* Nuevo bloque de texto descriptivo */}
+                                            <div style={{ marginTop: '8px', padding: '10px', backgroundColor: s.motivo_rechazo ? '#ffebee' : '#e8f5e9', borderRadius: '6px', fontSize: '0.9rem', color: '#333' }}>
+                                                {s.motivo_rechazo ? <span><strong>Motivo del Rechazo:</strong> {s.motivo_rechazo}</span> : <span>✅ Presupuesto auditado y autorizado para intervención.</span>}
+                                            </div>
                                         </div>
                                         )}
 
@@ -608,6 +625,11 @@ const AdminDashboard = () => {
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#1976d2', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: '#1976d2', fontSize: '1rem' }}><strong>4. Reparación Realizada</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {s.hora_salida_taller ? new Date(s.hora_salida_taller).toLocaleString('es-CO') : 'Sin fecha'}</p>
+                                            
+                                            {/* Nuevo bloque de texto descriptivo */}
+                                            <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '6px', fontSize: '0.9rem', color: '#333' }}>
+                                                <strong>Mano de obra y repuestos utilizados:</strong> {s.trabajos_realizados}
+                                            </div>
                                         </div>
                                         )}
 
@@ -628,6 +650,7 @@ const AdminDashboard = () => {
                                             </a>
                                         </div>
                                         )}
+                                        {/* --- FIN DE LA LÍNEA DE TIEMPO --- */}
                                     </div>
                                 </div>
                             </details>
