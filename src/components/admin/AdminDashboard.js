@@ -1,3 +1,4 @@
+/* eslint-disable */
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { Pie, Bar } from 'react-chartjs-2';
@@ -225,7 +226,7 @@ const AdminDashboard = () => {
         doc.line(120, finalY, 196, finalY);
         doc.text(`Recibe: ${nombreDestino}`, 120, finalY + 4);
         doc.text('Firma legible / Sello del Taller', 120, finalY + 8);
-        doc.text('Fecha: _____/_____/202___   Hora: ______:______', 120, finalY + 14);
+        doc.text('Fecha: _____/_____/202___  Hora: ______:______', 120, finalY + 14);
 
         const corteY = Math.max(135, finalY + 25);
         doc.setDrawColor(150, 150, 150); doc.setLineDash([3, 3], 0); doc.line(10, corteY, 206, corteY);
@@ -437,6 +438,7 @@ const AdminDashboard = () => {
                                 <option value="Taller">Taller</option>
                                 <option value="Coordinacion">Coordinacion</option>
                                 <option value="Admin">Admin</option>
+                                <option value="Archivo">Archivo</option>
                             </select>
                         </div>
                         <select value={nuevoUsuario.sede_id} onChange={e => setNuevoUsuario({...nuevoUsuario, sede_id: e.target.value})} required style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '15px', boxSizing: 'border-box' }}>

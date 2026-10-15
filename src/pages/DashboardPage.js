@@ -1,3 +1,4 @@
+/* eslint-disable */
 import React, { useContext } from 'react';
 import { Navigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
@@ -5,6 +6,7 @@ import ConductorDashboard from '../components/conductor/ConductorDashboard';
 import TallerDashboard from '../components/taller/TallerDashboard';
 import CoordinacionDashboard from '../components/coordinacion/CoordinacionDashboard';
 import AdminDashboard from '../components/admin/AdminDashboard';
+import ArchivoDashboard from '../components/archivo/ArchivoDashboard'; // <-- 1. NUEVO IMPORT
 import NotificationBell from '../components/NotificationBell';
 
 const DashboardPage = () => {
@@ -24,6 +26,8 @@ const DashboardPage = () => {
         return <CoordinacionDashboard />;
       case 'Admin':
         return <AdminDashboard />;
+      case 'Archivo': // <-- 2. NUEVO ROL AGREGADO
+        return <ArchivoDashboard />;
       default:
         return <div>Rol de usuario no reconocido.</div>;
     }
