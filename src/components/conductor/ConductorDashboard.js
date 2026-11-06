@@ -16,22 +16,27 @@ const ConductorDashboard = () => {
   const [solicitudes, setSolicitudes] = useState([]);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [observacionesInputs, setObservacionesInputs] = useState({}); 
-  const sigCanvases = {}; // Referencias para las firmas
+  const sigCanvases = {}; // Referencias para las firmas de satisfacción (conductor)
+  
+  // 🚀 NUEVO: Estados y referencias para la firma del taller externo
+  const sigCanvasesTaller = {}; 
+  const [mostrarFirmaTaller, setMostrarFirmaTaller] = useState({});
+  const [nombreTallerInputs, setNombreTallerInputs] = useState({});
 
-  // 3. CARGA DE DATOS (Ruta original restaurada)
+  // 3. CARGA DE DATOS
   const cargarDatos = async () => {
     try {
       const res = await api.get('/solicitudes/conductor');
       setSolicitudes(res.data);
     } catch (error) {
-      console.error("Error cargando solicitudes del conductor", error);
+      console.error("Error cargando solicitudes", error);
       alert("Error al cargar el historial de solicitudes. Verifique su conexión.");
     }
   };
 
   useEffect(() => { cargarDatos(); }, []);
   
-  // 4. MANEJO DE LA CONFIRMACIÓN DE ENTREGA (Lógica original intacta)
+  // 4. MANEJO DE LA CONFIRMACIÓN DE ENTREGA (Original)
   const handleSatisfaccion = async (id) => {
     if (sigCanvases[id].isEmpty()) {
       alert("Por favor, firme para confirmar la recepción del vehículo.");
@@ -60,14 +65,50 @@ const ConductorDashboard = () => {
     setObservacionesInputs(prev => ({ ...prev, [id]: texto }));
   };
 
-  // NUEVO: Función para cerrar sesión
+  // 🚀 NUEVO: Manejo de entrega a Taller Externo (Firma del Mecánico)
+  const handleNombreTallerChange = (id, texto) => {
+      setNombreTallerInputs(prev => ({ ...prev, [id]: texto }));
+  };
+
+  const handleFirmaTallerExterno = async (id) => {
+      const nombreRecibe = nombreTallerInputs[id] || '';
+      
+      if (!nombreRecibe.trim()) {
+          alert("Debe ingresar el nombre de quien recibe en el taller.");
+          return;
+      }
+      
+      if (sigCanvasesTaller[id].isEmpty()) {
+          alert("El encargado del taller externo debe firmar el documento.");
+          return;
+      }
+
+      const firmaBase64 = sigCanvasesTaller[id].toDataURL();
+
+      try {
+          // Llama al nuevo endpoint que creamos en el backend
+          await api.put(`/solicitudes/${id}/entrega-taller`, { 
+              firmaBase64,
+              nombreRecibe 
+          });
+          
+          setMostrarFirmaTaller(prev => ({ ...prev, [id]: false }));
+          setNombreTallerInputs(prev => ({ ...prev, [id]: '' }));
+          cargarDatos();
+          alert("Vehículo entregado al taller externo con éxito.");
+      } catch (error) {
+          console.error("Error al enviar firma del taller", error);
+          alert("Ocurrió un error al registrar la firma del taller.");
+      }
+  };
+
+
   const handleLogout = () => {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/';
   };
 
-  // NUEVO: Función de colores
   const getStatusColor = (estado) => {
       const status = estado?.toLowerCase() || '';
       if (status.includes('pendiente')) return { bg: '#fff3e0', text: '#e65100' };
@@ -77,16 +118,16 @@ const ConductorDashboard = () => {
       return { bg: '#eeeeee', text: '#424242' };
   };
 
-  // --- INICIO NUEVO CÓDIGO: PDF ORDEN MEDIA CARTA ---
+  // --- PDF ORDEN MEDIA CARTA (Modificado) ---
   const generarOrdenAutorizadaPDF = (solicitud) => {
-    const destinoExterno = window.prompt(
-      "¿A qué taller externo se enviará el vehículo? (Ej. CATERPILLAR)\nDeje en blanco si es para el Taller Interno:"
-    );
-    const nombreDestino = destinoExterno && destinoExterno.trim() !== "" ? destinoExterno.toUpperCase() : "TALLER INTERNO";
+    // 🚀 NUEVO: Si ya firmó el taller, tomamos el nombre de la BD, si no, preguntamos.
+    let nombreDestino = solicitud.nombre_quien_recibe || '';
+    if (!nombreDestino) {
+        const destinoExterno = window.prompt("¿A qué taller externo se enviará el vehículo? (Ej. CATERPILLAR)\nDeje en blanco si es para el Taller Interno:");
+        nombreDestino = destinoExterno && destinoExterno.trim() !== "" ? destinoExterno.toUpperCase() : "TALLER INTERNO";
+    }
 
     const doc = new jsPDF({ format: 'letter' });
-
-    // doc.addImage('/logo.png', 'PNG', 14, 10, 40, 20); // Actívalo si ya tienes el logo en public
 
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -150,9 +191,19 @@ const ConductorDashboard = () => {
     doc.text('Coordinación (Aprueba)', 65, finalY + 4);
 
     doc.line(120, finalY, 196, finalY);
-    doc.text(`Recibe: ${nombreDestino}`, 120, finalY + 4);
-    doc.text('Firma legible / Sello del Taller', 120, finalY + 8);
-    doc.text('Fecha: _____/_____/202___   Hora: ______:______', 120, finalY + 14);
+    
+    // 🚀 NUEVO: Inyectar firma del taller externo en el PDF si existe
+    if (solicitud.firma_proveedor_externo) {
+        doc.addImage(solicitud.firma_proveedor_externo, 'PNG', 120, finalY - 14, 35, 12);
+        
+        let fechaRec = solicitud.fecha_recepcion_taller ? new Date(solicitud.fecha_recepcion_taller) : new Date();
+        doc.text(`Recibe: ${solicitud.nombre_quien_recibe}`, 120, finalY + 4);
+        doc.text(`Fecha: ${fechaRec.toLocaleDateString()}   Hora: ${fechaRec.toLocaleTimeString()}`, 120, finalY + 10);
+    } else {
+        doc.text(`Recibe: ${nombreDestino}`, 120, finalY + 4);
+        doc.text('Firma legible / Sello del Taller', 120, finalY + 8);
+        doc.text('Fecha: _____/_____/202___   Hora: ______:______', 120, finalY + 14);
+    }
 
     const corteY = Math.max(135, finalY + 25);
     doc.setDrawColor(150, 150, 150);
@@ -165,46 +216,29 @@ const ConductorDashboard = () => {
 
     doc.save(`Remision_Servicio_${solicitud.placa_vehiculo || 'ID'}_ID${solicitud.id}.pdf`);
   };
-  // --- FIN NUEVO CÓDIGO ---
 
   return (
-    // DISEÑO MOBILE-FIRST APLICADO
     <main style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '15px', backgroundColor: '#f4f7f6', minHeight: '100vh', boxSizing: 'border-box' }}>
       
-      {/* CABECERA RESPONSIVA */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
           <div>
               <h2 style={{ margin: 0, fontSize: '1.3rem', color: '#333' }}>Bienvenido, {nombreUsuario}</h2>
               <span style={{ fontSize: '0.85rem', color: '#666' }}>Panel de Conductor | Sede: {nombreSede}</span>
           </div>
-          <button onClick={handleLogout} style={{ backgroundColor: 'transparent', border: '1px solid #dc3545', color: '#dc3545', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-              Salir
-          </button>
+          <button onClick={handleLogout} style={{ backgroundColor: 'transparent', border: '1px solid #dc3545', color: '#dc3545', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Salir</button>
       </header>
       
-      {/* BOTÓN GIGANTE PARA NUEVA SOLICITUD */}
-      <button 
-        onClick={() => setMostrarFormulario(!mostrarFormulario)} 
-        style={{ 
-            width: '100%', padding: '18px', fontSize: '1.1rem', fontWeight: 'bold', 
-            backgroundColor: mostrarFormulario ? '#9e9e9e' : '#0288d1', 
-            color: 'white', border: 'none', borderRadius: '12px', 
-            boxShadow: '0 4px 6px rgba(2, 136, 209, 0.3)', marginBottom: '25px', cursor: 'pointer',
-            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px'
-        }}
-      >
+      <button onClick={() => setMostrarFormulario(!mostrarFormulario)} style={{ width: '100%', padding: '18px', fontSize: '1.1rem', fontWeight: 'bold', backgroundColor: mostrarFormulario ? '#9e9e9e' : '#0288d1', color: 'white', border: 'none', borderRadius: '12px', boxShadow: '0 4px 6px rgba(2, 136, 209, 0.3)', marginBottom: '25px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
         <span style={{ fontSize: '1.4rem' }}>{mostrarFormulario ? '➖' : '➕'}</span> 
         {mostrarFormulario ? 'Ocultar Formulario' : 'Crear Nueva Solicitud'}
       </button>
 
-      {/* RENDERIZADO DEL FORMULARIO ORIGINAL (Si está activo) */}
       {mostrarFormulario && (
         <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', marginBottom: '25px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
             <NuevaSolicitudForm onSolicitudCreada={() => { setMostrarFormulario(false); cargarDatos(); }} />
         </div>
       )}
       
-      {/* HISTORIAL CON DISEÑO DE TARJETAS MÓVILES */}
       <div>
           <h3 style={{ fontSize: '1.1rem', color: '#555', marginBottom: '15px', marginLeft: '5px' }}>Historial de Mis Solicitudes</h3>
           
@@ -213,106 +247,61 @@ const ConductorDashboard = () => {
               return (
                   <div key={s.id} style={{ backgroundColor: 'white', borderRadius: '12px', padding: '15px', marginBottom: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderLeft: `5px solid ${colores.text}` }}>
                       
-                      {/* ENCABEZADO DE LA TARJETA */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                          <strong style={{ fontSize: '1.1rem', color: '#222' }}>
-                              {s.nombre_vehiculo} ({s.placa_vehiculo})
-                          </strong>
-                          <span style={{ backgroundColor: colores.bg, color: colores.text, padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                              {s.estado}
-                          </span>
+                          <strong style={{ fontSize: '1.1rem', color: '#222' }}>{s.nombre_vehiculo} ({s.placa_vehiculo})</strong>
+                          <span style={{ backgroundColor: colores.bg, color: colores.text, padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', textAlign: 'center', whiteSpace: 'nowrap' }}>{s.estado}</span>
                       </div>
                       <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: '#555' }}>
-                          <strong>ID #{s.id}</strong> • {new Date(s.fecha_creacion).toLocaleDateString('es-CO')}
+                          <strong>ID #{s.id}</strong> <br/> {new Date(s.fecha_creacion).toLocaleDateString('es-CO')}
                       </p>
 
-                      {/* VISUALIZACIÓN RÁPIDA DE RECHAZO */}
-                      {s.motivo_rechazo && (
-                        <div style={{marginTop: '1rem', padding: '1rem', backgroundColor: '#ffebee', border: '1px solid #ffcdd2', borderRadius: '8px', color: '#b71c1c', fontSize: '0.9rem'}}>
-                          <strong>⛔ Rechazada:</strong> {s.motivo_rechazo}
-                        </div>
-                      )}
-                      
-                      {/* --- LÍNEA DE TIEMPO DE TRAZABILIDAD (APLICA PARA LAS 3 VISTAS) --- */}
-<details style={{ outline: 'none', marginTop: '10px' }}>
-    <summary style={{ cursor: 'pointer', color: '#0288d1', fontSize: '0.9rem', fontWeight: '600', padding: '5px 0' }}>
-        ⏳ Ver Trazabilidad y Tiempos
-    </summary>
-    <div style={{ padding: '15px 12px', marginTop: '10px', backgroundColor: '#f9f9f9', borderRadius: '8px', fontSize: '0.85rem', color: '#444' }}>
-        
-        {/* Borde vertical gris que conecta los puntos */}
-        <div style={{ borderLeft: '2px solid #ccc', paddingLeft: '15px', marginLeft: '5px' }}>
-            
-            {/* PASO 1: CREACIÓN */}
-            <div style={{ position: 'relative', marginBottom: '15px' }}>
-                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#0288d1', fontSize: '1rem' }}>●</span>
-                <p style={{ margin: 0, color: '#0288d1' }}><strong>1️⃣ Solicitud Inicial</strong></p>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
-                    📅 {new Date(s.fecha_creacion).toLocaleString('es-CO')}
-                </p>
-                <p style={{ margin: '4px 0 0 0' }}>{s.necesidad_reportada} <br/><small>(Por: {s.nombre_conductor})</small></p>
-            </div>
-
-            {/* PASO 2: DIAGNÓSTICO */}
-            {s.diagnostico_taller && (
-            <div style={{ position: 'relative', marginBottom: '15px' }}>
-                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#f57c00', fontSize: '1rem' }}>●</span>
-                <p style={{ margin: 0, color: '#f57c00' }}><strong>2️⃣ Diagnóstico Taller</strong></p>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
-                    📅 {s.hora_ingreso_taller ? new Date(s.hora_ingreso_taller).toLocaleString('es-CO') : 'Sin fecha registrada'}
-                </p>
-                <p style={{ margin: '4px 0 0 0' }}>{s.diagnostico_taller} <br/><small>(Técnico: {s.nombre_tecnico})</small></p>
-            </div>
-            )}
-
-            {/* PASO 3: DECISIÓN */}
-            {s.fecha_aprobacion_rechazo && (
-            <div style={{ position: 'relative', marginBottom: '15px' }}>
-                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1rem' }}>●</span>
-                <p style={{ margin: 0, color: s.motivo_rechazo ? '#d32f2f' : '#388e3c' }}><strong>3️⃣ Decisión Coordinación</strong></p>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
-                    📅 {new Date(s.fecha_aprobacion_rechazo).toLocaleString('es-CO')}
-                </p>
-                <p style={{ margin: '4px 0 0 0' }}>{s.motivo_rechazo ? `Rechazado: ${s.motivo_rechazo}` : 'Aprobado'} <br/><small>(Coord: {s.nombre_coordinador})</small></p>
-            </div>
-            )}
-
-            {/* PASO 4: REPARACIÓN */}
-            {s.trabajos_realizados && (
-            <div style={{ position: 'relative', marginBottom: '15px' }}>
-                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#1976d2', fontSize: '1rem' }}>●</span>
-                <p style={{ margin: 0, color: '#1976d2' }}><strong>4️⃣ Reparación Realizada</strong></p>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
-                    📅 {s.hora_salida_taller ? new Date(s.hora_salida_taller).toLocaleString('es-CO') : 'Sin fecha registrada'}
-                </p>
-                <p style={{ margin: '4px 0 0 0' }}>{s.trabajos_realizados} <br/><small>Repuestos: {s.repuestos_utilizados || 'Ninguno'}</small></p>
-            </div>
-            )}
-
-            {/* PASO 5: CIERRE */}
-            {s.fecha_cierre_proceso && (
-            <div style={{ position: 'relative', marginBottom: '0' }}>
-                <span style={{ position: 'absolute', left: '-22px', top: '2px', color: '#388e3c', fontSize: '1rem' }}>●</span>
-                <p style={{ margin: 0, color: '#388e3c' }}><strong>5️⃣ Cierre del Proceso</strong></p>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: '#666', fontWeight: 'bold' }}>
-                    📅 {new Date(s.fecha_cierre_proceso).toLocaleString('es-CO')}
-                </p>
-                <p style={{ margin: '4px 0 0 0' }}>Observaciones: {s.observaciones_entrega_conductor || 'Ninguna'}</p>
-            </div>
-            )}
-        </div>
-    </div>
-</details>
-
-                      {/* --- INICIO NUEVO BOTÓN PARA PDF DE AUTORIZACIÓN --- */}
-                      {s.estado === 'En Reparación' && (
-                          <button onClick={() => generarOrdenAutorizadaPDF(s)} style={{ marginTop: '15px', width: '100%', padding: '10px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                      {/* --- BOTÓN PARA PDF DE AUTORIZACIÓN --- */}
+                      {(s.estado === 'En Reparación' || s.estado === 'Aprobado') && (
+                          <button onClick={() => generarOrdenAutorizadaPDF(s)} style={{ marginTop: '10px', width: '100%', padding: '10px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
                               📄 Descargar Orden Autorizada
                           </button>
                       )}
-                      {/* --- FIN NUEVO BOTÓN --- */}
 
-                      {/* SECCIÓN DE CONFIRMACIÓN DE ENTREGA (FIRMA) */}
+                      {/* 🚀 NUEVO: SECCIÓN DE FIRMA TALLER EXTERNO (Se muestra si está aprobado y aún no ha sido entregado) */}
+                      {s.estado === 'Aprobado' && !s.firma_proveedor_externo && (
+                        <div style={{ marginTop: '15px' }}>
+                            <button 
+                                onClick={() => setMostrarFirmaTaller(prev => ({ ...prev, [s.id]: !prev[s.id] }))} 
+                                style={{ width: '100%', padding: '10px', backgroundColor: '#0288d1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer' }}>
+                                {mostrarFirmaTaller[s.id] ? 'Cancelar Entrega a Taller' : 'Entregar a Taller Externo'}
+                            </button>
+
+                            {mostrarFirmaTaller[s.id] && (
+                                <div style={{ marginTop: '15px', border: '1px solid #ddd', padding: '15px', borderRadius: '8px', backgroundColor: '#fafafa' }}>
+                                    <h5 style={{ margin: '0 0 10px 0', color: '#0288d1' }}>✍️ Firma del Taller / Mecánico</h5>
+                                    
+                                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px', fontSize: '0.85rem' }}>Nombre de quien recibe:</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Ej: Taller CAT / Juan Pérez"
+                                        value={nombreTallerInputs[s.id] || ''}
+                                        onChange={(e) => handleNombreTallerChange(s.id, e.target.value)}
+                                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '15px', boxSizing: 'border-box' }}
+                                    />
+
+                                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px', fontSize: '0.85rem' }}>Firma del Mecánico/Taller:</label>
+                                    <div style={{ border: '2px dashed #999', borderRadius: '8px', width: '100%', maxWidth: '300px', height: '150px', backgroundColor: 'white', margin: '0 auto 15px auto', display: 'flex', justifyContent: 'center' }}>
+                                        <SignatureCanvas 
+                                            ref={ref => { sigCanvasesTaller[s.id] = ref; }} 
+                                            canvasProps={{width: 300, height: 150, className: 'sigCanvas'}} 
+                                        />
+                                    </div>
+                                    
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        <button onClick={() => sigCanvasesTaller[s.id].clear()} style={{ flex: 1, padding: '10px', backgroundColor: '#e0e0e0', color: '#333', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Borrar</button>
+                                        <button onClick={() => handleFirmaTallerExterno(s.id)} style={{ flex: 2, padding: '10px', backgroundColor: '#0288d1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Guardar Firma</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                      )}
+
+                      {/* SECCIÓN DE CONFIRMACIÓN DE ENTREGA (FIRMA CONDUCTOR FINAL) */}
                       {s.estado === 'Listo para Entrega' && (
                         <div style={{ marginTop: '15px', borderTop: '2px dashed #4caf50', paddingTop: '15px' }}>
                           <h5 style={{ margin: '0 0 10px 0', color: '#2e7d32' }}>✅ Confirmar Recepción del Vehículo</h5>
@@ -341,7 +330,6 @@ const ConductorDashboard = () => {
                           </div>
                         </div>
                       )}
-
                   </div>
               )
           }) : (
