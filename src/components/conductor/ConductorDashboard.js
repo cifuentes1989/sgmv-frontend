@@ -262,8 +262,8 @@ const ConductorDashboard = () => {
                           </button>
                       )}
 
-                      {/* 🚀 NUEVO: SECCIÓN DE FIRMA TALLER EXTERNO (Se muestra si está aprobado y aún no ha sido entregado) */}
-                      {s.estado === 'Aprobado' && !s.firma_proveedor_externo && (
+                      {/* 🚀 NUEVO: SECCIÓN DE FIRMA TALLER EXTERNO (Se muestra si está aprobado o en reparación y aún no ha sido entregado) */}
+                      {s.estado === 'En Reparación' && !s.firma_proveedor_externo && (
                         <div style={{ marginTop: '15px' }}>
                             <button 
                                 onClick={() => setMostrarFirmaTaller(prev => ({ ...prev, [s.id]: !prev[s.id] }))} 
