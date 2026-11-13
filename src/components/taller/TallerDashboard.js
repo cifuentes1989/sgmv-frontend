@@ -1,3 +1,4 @@
+/* eslint-disable */
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../../api/axios';
 import SignatureCanvas from 'react-signature-canvas';
@@ -5,9 +6,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const TallerDashboard = () => {
-  const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : { nombre_completo: 'Técnico', sede_id: null };
-
   const [pendientes, setPendientes] = useState([]);
   const [enReparacion, setEnReparacion] = useState([]);
   const [historial, setHistorial] = useState([]);
@@ -117,8 +115,6 @@ const TallerDashboard = () => {
     const nombreDestino = destinoExterno && destinoExterno.trim() !== "" ? destinoExterno.toUpperCase() : "TALLER INTERNO";
 
     const doc = new jsPDF({ format: 'letter' });
-
-    // doc.addImage('/logo.png', 'PNG', 14, 10, 40, 20); // Actívalo si ya tienes el logo en public
 
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');

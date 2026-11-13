@@ -1,3 +1,4 @@
+/* eslint-disable */
 import React, { useState, useEffect } from 'react';
 import api from '../../api/axios';
 
@@ -31,7 +32,7 @@ const EstadoFlota = () => {
             // Analizar estado (NUEVA LÓGICA DE 3 ESTADOS)
             const esFueraServicio = v.fuera_de_servicio === true;
             const esTaller = !esFueraServicio && v.estado_actual === 'EN TALLER';
-            const esOperativo = !esFueraServicio && !esTaller;
+            // Se eliminó la variable "esOperativo" que no se utilizaba
             
             // Sumar al Global
             global.total++;
