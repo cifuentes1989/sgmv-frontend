@@ -255,12 +255,12 @@ const ConductorDashboard = () => {
                           <strong>ID #{s.id}</strong> <br/> {new Date(s.fecha_creacion).toLocaleDateString('es-CO')}
                       </p>
 
-                      {/* --- BOTÓN PARA PDF DE AUTORIZACIÓN --- */}
-                      {(s.estado === 'En Reparación' || s.estado === 'Aprobado') && (
-                          <button onClick={() => generarOrdenAutorizadaPDF(s)} style={{ marginTop: '10px', width: '100%', padding: '10px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                              📄 Descargar Orden Autorizada
-                          </button>
-                      )}
+                     {/* --- BOTÓN PARA PDF DE AUTORIZACIÓN (Disponible en todo el ciclo posterior a la aprobación) --- */}
+                        {['Aprobado', 'En Reparación', 'Listo para Entrega', 'Pendiente de Cierre', 'Pendiente de Archivo', 'Proceso Finalizado'].includes(s.estado) && (
+                        <button onClick={() => generarOrdenAutorizadaPDF(s)} style={{ marginTop: '10px', width: '100%', padding: '10px', backgroundColor: '#e8f5e9', color: '#2e7d32', border: '2px solid #2e7d32', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                        📄 Descargar Orden Autorizada
+                        </button>
+                        )}
 
                       {/* 🚀 NUEVO: SECCIÓN DE FIRMA TALLER EXTERNO (Se muestra si está aprobado o en reparación y aún no ha sido entregado) */}
                       {s.estado === 'En Reparación' && !s.firma_proveedor_externo && (
