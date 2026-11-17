@@ -583,13 +583,11 @@ const AdminDashboard = () => {
                                 <div style={{ padding: '20px', backgroundColor: 'white' }}>
                                     <div style={{ borderLeft: '3px solid #e0e0e0', paddingLeft: '20px', marginLeft: '10px' }}>
                                         
-                                        {/* --- LÍNEA DE TIEMPO DEL TICKET CON TEXTOS DESCRIPTIVOS AÑADIDOS --- */}
+                                        {/* --- LÍNEA DE TIEMPO DEL TICKET --- */}
                                         <div style={{ position: 'relative', marginBottom: '20px' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#0288d1', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: '#0288d1', fontSize: '1rem' }}><strong>1. Solicitud Inicial</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {new Date(s.fecha_creacion).toLocaleString('es-CO')}</p>
-                                            
-                                            {/* Nuevo bloque de texto descriptivo */}
                                             {s.necesidad_reportada && (
                                                 <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#e1f5fe', borderRadius: '6px', fontSize: '0.9rem', color: '#333' }}>
                                                     <strong>Falla reportada por Conductor:</strong> {s.necesidad_reportada}
@@ -602,8 +600,6 @@ const AdminDashboard = () => {
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#f57c00', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: '#f57c00', fontSize: '1rem' }}><strong>2. Diagnóstico Taller</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {s.hora_ingreso_taller ? new Date(s.hora_ingreso_taller).toLocaleString('es-CO') : 'Sin fecha'}</p>
-                                            
-                                            {/* Nuevo bloque de texto descriptivo */}
                                             <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#fff3e0', borderRadius: '6px', fontSize: '0.9rem', color: '#333' }}>
                                                 <strong>Diagnóstico y Presupuesto:</strong> {s.diagnostico_taller}
                                             </div>
@@ -614,8 +610,6 @@ const AdminDashboard = () => {
                                         <div style={{ position: 'relative', marginBottom: '20px' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: s.motivo_rechazo ? '#d32f2f' : '#388e3c', fontSize: '1rem' }}><strong>3. {s.motivo_rechazo ? 'Solicitud Rechazada' : 'Aprobación Coordinación'}</strong></p>
-                                            
-                                            {/* Nuevo bloque de texto descriptivo */}
                                             <div style={{ marginTop: '8px', padding: '10px', backgroundColor: s.motivo_rechazo ? '#ffebee' : '#e8f5e9', borderRadius: '6px', fontSize: '0.9rem', color: '#333' }}>
                                                 {s.motivo_rechazo ? <span><strong>Motivo del Rechazo:</strong> {s.motivo_rechazo}</span> : <span>✅ Presupuesto auditado y autorizado para intervención.</span>}
                                             </div>
@@ -627,8 +621,6 @@ const AdminDashboard = () => {
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#1976d2', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
                                             <p style={{ margin: 0, color: '#1976d2', fontSize: '1rem' }}><strong>4. Reparación Realizada</strong></p>
                                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>📅 {s.hora_salida_taller ? new Date(s.hora_salida_taller).toLocaleString('es-CO') : 'Sin fecha'}</p>
-                                            
-                                            {/* Nuevo bloque de texto descriptivo */}
                                             <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '6px', fontSize: '0.9rem', color: '#333' }}>
                                                 <strong>Mano de obra y repuestos utilizados:</strong> {s.trabajos_realizados}
                                             </div>
@@ -643,13 +635,30 @@ const AdminDashboard = () => {
                                         </div>
                                         )}
 
-                                        {s.url_evidencia_externa && (
+                                        {/* --- NUEVO: PASO 6. GESTIÓN DOCUMENTAL --- */}
+                                        {(s.url_doc_ingreso || s.url_doc_salida || s.url_evidencia_externa) && (
                                         <div style={{ position: 'relative', marginBottom: '0' }}>
                                             <span style={{ position: 'absolute', left: '-28px', top: '0', color: '#9c27b0', fontSize: '1.2rem', backgroundColor: 'white' }}>●</span>
-                                            <p style={{ margin: 0, color: '#9c27b0', fontSize: '1rem' }}><strong>6. Soportes Archivados</strong></p>
-                                            <a href={s.url_evidencia_externa} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '10px', padding: '8px 15px', backgroundColor: '#f3e5f5', color: '#6a1b9a', borderRadius: '5px', textDecoration: 'none', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                                📎 Ver Documento Adjunto
-                                            </a>
+                                            <p style={{ margin: 0, color: '#9c27b0', fontSize: '1rem' }}><strong>6. Gestión Documental (Facturación)</strong></p>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>Soportes de ingreso y salida del taller</p>
+                                            
+                                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
+                                                
+                                                {/* Botón de Ingreso */}
+                                                {s.url_doc_ingreso && (
+                                                    <a href={s.url_doc_ingreso} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 15px', backgroundColor: '#e1f5fe', color: '#0277bd', border: '1px solid #81d4fa', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                                        📄 Ver Soporte de Ingreso
+                                                    </a>
+                                                )}
+
+                                                {/* Botón de Salida / Evidencia */}
+                                                {(s.url_doc_salida || s.url_evidencia_externa) && (
+                                                    <a href={s.url_doc_salida || s.url_evidencia_externa} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 15px', backgroundColor: '#fff3e0', color: '#ef6c00', border: '1px solid #ffcc80', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                                        📄 Ver Soporte de Salida
+                                                    </a>
+                                                )}
+
+                                            </div>
                                         </div>
                                         )}
                                         {/* --- FIN DE LA LÍNEA DE TIEMPO --- */}
