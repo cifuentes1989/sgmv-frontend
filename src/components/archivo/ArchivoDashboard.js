@@ -75,7 +75,8 @@ const ArchivoDashboard = () => {
             const formData = new FormData();
             formData.append('evidencia', fileIngreso);
             try {
-                await api.put(`/archivo/subir-ingreso/${s.id}`, formData);
+                // CORRECCIÓN APLICADA AQUÍ: /solicitudes/archivo/...
+                await api.put(`/solicitudes/archivo/subir-ingreso/${s.id}`, formData);
                 alert("Documento de ingreso subido con éxito.");
                 cargarDatos();
             } catch (error) { console.error(error); alert("Error al subir ingreso."); }
@@ -90,7 +91,8 @@ const ArchivoDashboard = () => {
             const formData = new FormData();
             formData.append('evidencia', fileSalida);
             try {
-                await api.put(`/archivo/subir-salida-cierre/${s.id}`, formData);
+                // CORRECCIÓN APLICADA AQUÍ: /solicitudes/archivo/...
+                await api.put(`/solicitudes/archivo/subir-salida-cierre/${s.id}`, formData);
                 alert("Proceso cerrado definitivamente.");
                 cargarDatos();
             } catch (error) { console.error(error); alert("Error al subir salida."); }
